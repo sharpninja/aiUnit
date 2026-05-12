@@ -258,7 +258,7 @@ public sealed class CliFrontierClient : IFrontierModelClient
 					&& doc.RootElement.TryGetProperty("result", out var resultEl)
 					&& resultEl.ValueKind == JsonValueKind.String)
 				{
-					return resultEl.GetString() ?? string.Empty;
+					return StripCodeFence(resultEl.GetString() ?? string.Empty);
 				}
 			}
 			catch (JsonException)
@@ -267,7 +267,37 @@ public sealed class CliFrontierClient : IFrontierModelClient
 			}
 		}
 
-		return trimmed;
+		return StripCodeFence(trimmed);
+	}
+
+	/// <summary>
+	/// Strips a single leading + trailing markdown code-fence wrapper from the
+	/// model output. Even with --output-format json or "return JSON only"
+	/// instructions, Claude and Codex sometimes wrap the response in a
+	/// ```json ... ``` (or plain ``` ... ```) block. Removing the wrapper lets
+	/// downstream JSON parsers consume the content directly. If no fence is
+	/// present, the text is returned unchanged.
+	/// </summary>
+	internal static string StripCodeFence(string text)
+	{
+		var trimmed = text.Trim();
+		if (!trimmed.StartsWith("```", StringComparison.Ordinal))
+		{
+			return trimmed;
+		}
+
+		// First line is the opening fence (possibly with a language tag).
+		var firstNewline = trimmed.IndexOf('\n');
+		if (firstNewline < 0)
+		{
+			return trimmed;
+		}
+		var body = trimmed[(firstNewline + 1)..].TrimEnd();
+		if (body.EndsWith("```", StringComparison.Ordinal))
+		{
+			body = body[..^3].TrimEnd();
+		}
+		return body;
 	}
 
 	private static bool IsConcreteModel(string? value) =>

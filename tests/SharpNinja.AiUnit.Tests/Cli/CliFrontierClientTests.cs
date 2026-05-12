@@ -363,4 +363,36 @@ public sealed class CliFrontierClientTests
 		Assert.False(Directory.Exists(tempDirSeen!),
 			$"Temp workspace '{tempDirSeen}' should be cleaned up after SendAsync completes.");
 	}
+
+	[Fact]
+	public async Task SendAsync_ClaudeJsonFencedResult_StripsCodeFence()
+	{
+		// Real-world Claude CLI output even with --output-format json sometimes
+		// wraps the inner "result" payload in ```json ... ``` fences. The
+		// validator downstream parses the extracted text as JSON, so we strip
+		// fences inside the client.
+		var runner = Substitute.For<IProcessRunner>();
+		runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<string?>(),
+			Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+			.Returns(new ProcessExecutionResult(
+				ExitCode: 0,
+				Stdout: "{\"type\":\"result\",\"result\":\"```json\\n{\\\"rating\\\":\\\"match\\\"}\\n```\"}",
+				Stderr: string.Empty,
+				TimedOut: false));
+
+		var client = BuildClient(runner, command: "claude");
+		var response = await client.SendAsync(BuildRequest());
+
+		Assert.Null(response.Error);
+		Assert.Equal("{\"rating\":\"match\"}", response.Text);
+	}
+
+	[Fact]
+	public void StripCodeFence_HandlesFencedAndUnfencedInputs()
+	{
+		Assert.Equal("{\"a\":1}", CliFrontierClient.StripCodeFence("{\"a\":1}"));
+		Assert.Equal("{\"a\":1}", CliFrontierClient.StripCodeFence("```json\n{\"a\":1}\n```"));
+		Assert.Equal("{\"a\":1}", CliFrontierClient.StripCodeFence("```\n{\"a\":1}\n```"));
+		Assert.Equal("{\"a\":1}", CliFrontierClient.StripCodeFence("  ```json\n{\"a\":1}\n```  "));
+	}
 }
