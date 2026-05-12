@@ -1,0 +1,24 @@
+# .NET build artifacts
+bin/
+obj/
+
+# NuGet outputs
+*.nupkg
+*.snupkg
+
+# Rider / VS / VS Code
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+TestResults/
+coverage.*
+*.trx
