@@ -388,6 +388,52 @@ public sealed class CliFrontierClientTests
 	}
 
 	[Fact]
+	public async Task SendAsync_ClaudeNonZeroExit_WithEnvelopeIsErrorFalse_ReturnsSuccess()
+	{
+		// Real-world Claude Code CLI: SessionEnd hooks fire AFTER the model
+		// has finished and can produce a non-zero exit. The envelope's
+		// is_error:false flag is the authoritative success signal; trust it
+		// over the exit code.
+		var runner = Substitute.For<IProcessRunner>();
+		runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<string?>(),
+			Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+			.Returns(new ProcessExecutionResult(
+				ExitCode: 1,
+				Stdout: "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"valid model output\"}",
+				Stderr: "SessionEnd hook [...] failed: Hook cancelled",
+				TimedOut: false));
+
+		var client = BuildClient(runner, command: "claude");
+		var response = await client.SendAsync(BuildRequest());
+
+		Assert.Null(response.Error);
+		Assert.Equal("valid model output", response.Text);
+	}
+
+	[Fact]
+	public async Task SendAsync_ClaudeZeroExit_WithEnvelopeIsErrorTrue_ReturnsCliError()
+	{
+		// Inverse case: exit code 0 but envelope explicitly says is_error:true.
+		// Trust the envelope; surface as cli_error so callers do not silently
+		// consume failed model runs.
+		var runner = Substitute.For<IProcessRunner>();
+		runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<string?>(),
+			Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+			.Returns(new ProcessExecutionResult(
+				ExitCode: 0,
+				Stdout: "{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"result\":\"partial\",\"error\":\"rate limit hit\"}",
+				Stderr: string.Empty,
+				TimedOut: false));
+
+		var client = BuildClient(runner, command: "claude");
+		var response = await client.SendAsync(BuildRequest());
+
+		Assert.NotNull(response.Error);
+		Assert.Equal("cli_error", response.Error!.ErrorCode);
+		Assert.Contains("rate limit hit", response.Error.Message);
+	}
+
+	[Fact]
 	public void StripCodeFence_HandlesFencedAndUnfencedInputs()
 	{
 		Assert.Equal("{\"a\":1}", CliFrontierClient.StripCodeFence("{\"a\":1}"));

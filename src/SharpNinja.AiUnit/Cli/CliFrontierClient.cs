@@ -105,6 +105,39 @@ public sealed class CliFrontierClient : IFrontierModelClient
 				return Fail(sw, "timeout",
 					$"'{_command}' did not exit within {_timeout.TotalSeconds:F0}s.", null);
 			}
+
+			// Determine success / failure signal:
+			//
+			//   Claude with --output-format json self-declares status via
+			//   is_error + subtype fields in the result envelope. Trust those
+			//   ABOVE the exit code, because Claude Code installs a SessionEnd
+			//   hook that can produce non-zero exit AFTER valid model output
+			//   has already been written. Envelope is_error:false means the
+			//   model run succeeded; non-zero exit is post-completion noise.
+			//
+			//   For other CLIs (codex, generic): no envelope. Fall back to the
+			//   exit-code-is-authoritative path.
+			var envelope = TryParseClaudeEnvelope(result.Stdout, _command);
+			if (envelope.HasValue)
+			{
+				if (envelope.Value.IsError)
+				{
+					return Fail(sw, "cli_error",
+						$"'{_command}' returned envelope with is_error=true: {envelope.Value.ErrorDetail ?? envelope.Value.Text}",
+						result.ExitCode == 0 ? null : result.ExitCode);
+				}
+				if (result.ExitCode != 0)
+				{
+					// Envelope says success; exit code disagrees (hook noise).
+					_logger.LogWarning(
+						"CLI {Provider} envelope is_error=false but exitCode={Code}; treating as success. stderrExcerpt='{Stderr}'",
+						_providerName, result.ExitCode,
+						result.Stderr.Length > 200 ? result.Stderr.Substring(0, 200) : result.Stderr);
+				}
+				return BuildSuccess(sw, envelope.Value.Text, result.Stdout.Length);
+			}
+
+			// No claude envelope: exit code is authoritative.
 			if (result.ExitCode != 0)
 			{
 				var excerpt = (string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr).Trim();
@@ -121,18 +154,7 @@ public sealed class CliFrontierClient : IFrontierModelClient
 					(result.Stderr.Length > 200 ? result.Stderr.Substring(0, 200) : result.Stderr), null);
 			}
 
-			_logger.LogInformation(
-				"CLI {Provider} ok: command='{Command}' latencyMs={Latency} stdoutLen={Len}",
-				_providerName, _command, sw.ElapsedMilliseconds, result.Stdout.Length);
-
-			return new FrontierResponse(
-				Text: text,
-				TokenUsage: FrontierTokenUsage.Zero,
-				LatencyMs: sw.ElapsedMilliseconds,
-				Provider: _providerName,
-				ModelVersion: ModelVersion,
-				EstimatedCostUsd: null,
-				Error: null);
+			return BuildSuccess(sw, text, result.Stdout.Length);
 		}
 		finally
 		{
@@ -235,6 +257,89 @@ public sealed class CliFrontierClient : IFrontierModelClient
 				psi.ArgumentList.Add(prompt);
 				return (psi, null);
 		}
+	}
+
+	/// <summary>
+	/// Parsed Claude --output-format json envelope. Carries the self-declared
+	/// success/error status that takes precedence over the process exit code.
+	/// </summary>
+	private readonly record struct ClaudeEnvelope(string Text, bool IsError, string? ErrorDetail);
+
+	/// <summary>
+	/// Attempts to parse Claude's --output-format json envelope from stdout.
+	/// Returns null when the command is not "claude" or the stdout is not a
+	/// recognizable Claude envelope. When parsed, <see cref="ClaudeEnvelope.IsError"/>
+	/// reflects the envelope's <c>is_error</c> field (true also when
+	/// <c>subtype</c> is "error"); <see cref="ClaudeEnvelope.Text"/> is the
+	/// extracted <c>result</c> string (with code fences stripped).
+	/// </summary>
+	private static ClaudeEnvelope? TryParseClaudeEnvelope(string stdout, string command)
+	{
+		if (!string.Equals(command.Trim(), "claude", StringComparison.OrdinalIgnoreCase))
+		{
+			return null;
+		}
+		var trimmed = stdout.Trim();
+		if (string.IsNullOrEmpty(trimmed) || !trimmed.StartsWith("{", StringComparison.Ordinal))
+		{
+			return null;
+		}
+		try
+		{
+			using var doc = JsonDocument.Parse(trimmed);
+			var root = doc.RootElement;
+			if (root.ValueKind != JsonValueKind.Object)
+			{
+				return null;
+			}
+
+			var isError = root.TryGetProperty("is_error", out var ie)
+				&& ie.ValueKind == JsonValueKind.True;
+			if (!isError && root.TryGetProperty("subtype", out var st)
+				&& st.ValueKind == JsonValueKind.String
+				&& string.Equals(st.GetString(), "error", StringComparison.OrdinalIgnoreCase))
+			{
+				isError = true;
+			}
+
+			var text = root.TryGetProperty("result", out var resultEl)
+				&& resultEl.ValueKind == JsonValueKind.String
+				? StripCodeFence(resultEl.GetString() ?? string.Empty)
+				: string.Empty;
+
+			string? errorDetail = null;
+			if (isError && root.TryGetProperty("error", out var errEl))
+			{
+				errorDetail = errEl.ValueKind == JsonValueKind.String
+					? errEl.GetString()
+					: errEl.ToString();
+			}
+
+			return new ClaudeEnvelope(text, isError, errorDetail);
+		}
+		catch (JsonException)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Builds a successful <see cref="FrontierResponse"/> with the assistant
+	/// text + zero-token usage placeholder.
+	/// </summary>
+	private FrontierResponse BuildSuccess(Stopwatch sw, string text, int stdoutLength)
+	{
+		_logger.LogInformation(
+			"CLI {Provider} ok: command='{Command}' latencyMs={Latency} stdoutLen={Len}",
+			_providerName, _command, sw.ElapsedMilliseconds, stdoutLength);
+		return new FrontierResponse(
+			Text: text,
+			TokenUsage: FrontierTokenUsage.Zero,
+			LatencyMs: sw.ElapsedMilliseconds,
+			Provider: _providerName,
+			ModelVersion: ModelVersion,
+			EstimatedCostUsd: null,
+			Error: null);
 	}
 
 	/// <summary>
