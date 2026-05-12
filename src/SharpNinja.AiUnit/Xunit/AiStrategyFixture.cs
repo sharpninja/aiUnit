@@ -179,19 +179,32 @@ public sealed class AiStrategyFixture : IDisposable
 		var strategyCfg = cfgField.GetValue(active);
 
 		// (IFrontierModelClient? Client, ResolvedStrategy Resolved, string SkipReason)
-		// AiUnitStrategyResolver.Build(string name, AiUnitStrategyConfig? config)
+		// AiUnitStrategyResolver.Build(string name, AiUnitStrategySettings? settings, ...)
+		// First two params are required; any additional params have defaults
+		// (e.g., IHttpClientFactory? = null). Pick the Build with the highest
+		// param count so all optional-with-defaults get null/Type.Missing.
 		var build = resolverType
 			.GetMethods(BindingFlags.Public | BindingFlags.Static)
-			.FirstOrDefault(m => m.Name == "Build" && m.GetParameters().Length == 2);
+			.Where(m => m.Name == "Build" && m.GetParameters().Length >= 2)
+			.OrderByDescending(m => m.GetParameters().Length)
+			.FirstOrDefault();
 		if (build is null)
 		{
-			return (null, null, "AiUnitStrategyResolver.Build(string, config) not found.");
+			return (null, null, "AiUnitStrategyResolver.Build(string, settings, ...) not found.");
 		}
 
 		object? buildResult;
 		try
 		{
-			buildResult = build.Invoke(null, new[] { strategyName, strategyCfg });
+			var parameters = build.GetParameters();
+			var args = new object?[parameters.Length];
+			args[0] = strategyName;
+			args[1] = strategyCfg;
+			for (var i = 2; i < parameters.Length; i++)
+			{
+				args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
+			}
+			buildResult = build.Invoke(null, args);
 		}
 		catch (TargetInvocationException tie) when (tie.InnerException is not null)
 		{
