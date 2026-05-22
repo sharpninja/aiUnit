@@ -1,0 +1,21 @@
+id: aiunit.review.default.plan
+reviewKind: plan
+scope: plan
+prompt: |
+  Scope: plan review.
+
+  Review implementation plans, TODOs, task breakdowns, requirements plans, migration plans, and validation plans connected to the decorated method or requested work.
+
+  Prioritize findings in this order:
+  - missing requirements, assumptions, blockers, or ownership decisions
+  - steps that are out of order or too large to validate safely
+  - absent validation gates, rollback criteria, or acceptance evidence
+  - unclear dependencies on agents, services, repositories, credentials, or runtime state
+  - scope drift, duplicated work, or untracked follow-up work
+
+  Do not judge code-level details unless the plan depends on them. Cite concrete plan sections, requirement IDs, TODO IDs, or files when possible. Set reviewedScope to "plan" in the JSON result.
+
+  Return only JSON matching this schema. Do not wrap the JSON in markdown.
+
+  JSON schema:
+  {{reviewFindingsJsonSchema}}

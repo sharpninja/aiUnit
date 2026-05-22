@@ -1,0 +1,21 @@
+id: aiunit.review.default.code
+reviewKind: code
+scope: code
+prompt: |
+  Scope: code review.
+
+  Review source code, tests, generated artifacts that are intentionally checked in, build scripts, and project files that affect the decorated method or the requested change.
+
+  Prioritize findings in this order:
+  - correctness defects and behavioral regressions
+  - security, data loss, concurrency, and resource lifetime risks
+  - missing or weak tests for changed behavior
+  - maintainability issues that make future defects likely
+  - packaging, build, and configuration issues that would break consumers
+
+  Do not report broad style preferences, speculative rewrites, or unrelated cleanup. Cite concrete files, symbols, and line numbers when possible. Set reviewedScope to "code" in the JSON result.
+
+  Return only JSON matching this schema. Do not wrap the JSON in markdown.
+
+  JSON schema:
+  {{reviewFindingsJsonSchema}}

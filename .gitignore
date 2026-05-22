@@ -22,3 +22,6 @@ Thumbs.db
 TestResults/
 coverage.*
 *.trx
+
+AGENTS-README-FIRST.yaml
+.mcpServer/

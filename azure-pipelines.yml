@@ -1,0 +1,88 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  BuildConfiguration: Release
+  DotNetSdkVersion: 10.0.x
+  NuGetPackageOutput: $(Build.SourcesDirectory)\artifacts\nupkg
+  PackageVersion: 0.1.0-preview.$(Build.BuildId)
+
+pool:
+  vmImage: windows-latest
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: UseDotNet@2
+    displayName: Install .NET SDK
+    inputs:
+      packageType: sdk
+      version: $(DotNetSdkVersion)
+
+  - pwsh: dotnet --info
+    displayName: Show .NET SDK info
+
+  - pwsh: dotnet restore .\SharpNinja.aiUnit.sln
+    displayName: Restore
+
+  - pwsh: >
+      dotnet test .\SharpNinja.aiUnit.sln
+      --configuration $(BuildConfiguration)
+      --no-restore
+      --logger trx
+      --results-directory "$(Agent.TempDirectory)\TestResults"
+    displayName: Test
+
+  - task: PublishTestResults@2
+    displayName: Publish test results
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: "$(Agent.TempDirectory)\\TestResults\\*.trx"
+      failTaskOnFailedTests: true
+
+  - pwsh: |
+      New-Item -ItemType Directory -Force -Path "$(NuGetPackageOutput)" | Out-Null
+      dotnet pack .\src\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj `
+        --configuration $(BuildConfiguration) `
+        --no-restore `
+        --output "$(NuGetPackageOutput)" `
+        /p:PackageVersion=$(PackageVersion) `
+        /p:ContinuousIntegrationBuild=true
+    displayName: Pack NuGet package
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish NuGet package artifact
+    inputs:
+      targetPath: $(NuGetPackageOutput)
+      artifactName: aiUnit-nuget
+
+  - task: PowerShell@2
+    displayName: Push to NuGet (main only)
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    env:
+      NUGET_API_KEY: $(NuGetApiKey)
+    inputs:
+      pwsh: true
+      targetType: inline
+      script: |
+        if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
+          Write-Host "NuGetApiKey not set; skipping nuget.org publish."
+          exit 0
+        }
+
+        $packages = Get-ChildItem -Path "$(Build.SourcesDirectory)/artifacts/nupkg" -Filter *.nupkg | Select-Object -ExpandProperty FullName
+        foreach ($package in $packages) {
+          dotnet nuget push $package --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY --skip-duplicate
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet nuget push failed for $package"
+          }
+        }

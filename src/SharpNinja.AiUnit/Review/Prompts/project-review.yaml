@@ -1,0 +1,21 @@
+id: aiunit.review.default.project
+reviewKind: project
+scope: project
+prompt: |
+  Scope: project review.
+
+  Review the project as a deliverable: requirements coverage, traceability, source layout, build and test readiness, packaging, documentation, operational readiness, and known repository state.
+
+  Prioritize findings in this order:
+  - unmet or unmapped functional, technical, or test requirements
+  - incomplete implementation paths that block release or adoption
+  - build, packaging, versioning, or dependency risks
+  - documentation gaps that would prevent correct consumer use
+  - operational risks such as missing configuration, credentials, monitoring, or deployment evidence
+
+  Do not duplicate isolated code-review or plan-review findings unless they affect project readiness. Cite concrete requirement IDs, files, commands, package outputs, or repository state when possible. Set reviewedScope to "project" in the JSON result.
+
+  Return only JSON matching this schema. Do not wrap the JSON in markdown.
+
+  JSON schema:
+  {{reviewFindingsJsonSchema}}
