@@ -35,7 +35,7 @@ public sealed class AiUnitStrategyResolverTests
 		"GOOGLE_API_KEY",
 		"XAI_API_KEY",
 		"MAF_API_KEY",
-		"CLINE_API_KEY",
+		"COPILOT_API_KEY",
 	};
 
 	private static IDictionary<string, string?> SnapshotAndClear()
@@ -67,12 +67,15 @@ public sealed class AiUnitStrategyResolverTests
 			Assert.NotNull(config);
 			Assert.NotEmpty(config!.Strategies);
 			Assert.Contains("maf", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
-			Assert.Contains("cline", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
+			Assert.Contains("maf-grok", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("claude", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
+			Assert.Contains("claude-code-opus", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("claude-api", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("grok", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("codex", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
+			Assert.Contains("codex-subscription", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("codex-api", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
+			Assert.Contains("copilot-gemini", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("gemini", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 		}
 		finally { Restore(snap); }
@@ -94,6 +97,44 @@ public sealed class AiUnitStrategyResolverTests
 			// claude strategy is pinned to Sonnet 4.6 by the bundled appsettings.
 			Assert.Equal("claude-sonnet-4-6", resolved.Model);
 			Assert.Equal("claude-sonnet-4-6", client!.ModelVersion);
+		}
+		finally { Restore(snap); }
+	}
+
+	[Fact]
+	public void Build_ClaudeCodeOpusCli_NoApiKeyNeeded_BuildsCliClient_WithOpusModel()
+	{
+		var snap = SnapshotAndClear();
+		try
+		{
+			var config = AiUnitStrategyLoader.TryLoad();
+			Assert.NotNull(config);
+			Assert.True(config!.Strategies.TryGetValue("claude-code-opus", out var claudeCfg));
+			var (client, resolved, skipReason) = AiUnitStrategyResolver.Build("claude-code-opus", claudeCfg);
+			Assert.Equal(string.Empty, skipReason);
+			Assert.NotNull(client);
+			Assert.Equal("cli", resolved.Kind);
+			Assert.Equal("claude-opus-4-5", resolved.Model);
+			Assert.Equal("claude-opus-4-5", client!.ModelVersion);
+		}
+		finally { Restore(snap); }
+	}
+
+	[Fact]
+	public void Build_CopilotGeminiCli_NoApiKeyNeeded_BuildsCliClient()
+	{
+		var snap = SnapshotAndClear();
+		try
+		{
+			var config = AiUnitStrategyLoader.TryLoad();
+			Assert.NotNull(config);
+			Assert.True(config!.Strategies.TryGetValue("copilot-gemini", out var copilotCfg));
+			var (client, resolved, skipReason) = AiUnitStrategyResolver.Build("copilot-gemini", copilotCfg);
+			Assert.Equal(string.Empty, skipReason);
+			Assert.NotNull(client);
+			Assert.Equal("cli", resolved.Kind);
+			Assert.Equal("gemini-2.5-pro", resolved.Model);
+			Assert.Equal("gemini-2.5-pro", client!.ModelVersion);
 		}
 		finally { Restore(snap); }
 	}

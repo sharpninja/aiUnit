@@ -1,0 +1,107 @@
+screenId: workspace-overview
+wireframeBaselineVersion: svg-1
+title: Workspace overview
+prompt: |-
+  Compare the finished aiUnit terminal screenshot against the rendered PNG baseline from the canonical SVG wireframe for the Workspace Overview screen.
+  The actual screenshot is a terminal UI capture at 120 columns by 36 rows. The wireframe is the richer visual contract for the same screen.
+  Validate that the actual screen preserves the required user-facing regions, labels, project discovery data, warning state, and command affordances. Treat minor terminal styling differences as acceptable unless they hide or remove a required control, state, or label.
+functionalRequirements:
+- id: FR-AIUNITREPL-001
+  text: Discover aiUnit-enabled projects recursively from the supplied root.
+- id: FR-AIUNITREPL-002
+  text: Show discovered projects, active strategy, strategy count, config path/status, package reference status, and validation state.
+- id: FR-AIUNITREPL-004
+  text: Provide a TUI workspace overview screen for discovery status and global actions.
+- id: FR-AIUNITREPL-009
+  text: Provide SVG wireframes and capture finished TUI screenshots for each wireframe.
+technicalRequirements:
+- id: TR-AIUNITREPL-005
+  text: Use a proven terminal rendering path and deterministic terminal dimensions for the TUI.
+- id: TR-AIUNITREPL-007
+  text: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
+- id: TR-AIUNITREPL-009
+  text: Screenshot capture must use deterministic terminal size and a seeded fixture workspace.
+agentsReadmeFirstPath: AGENTS-README-FIRST.yaml
+actualScreenshotPath: docs/screenshots/aiunit-repl/01-workspace-overview.png
+wireframeScreenshotPath: docs/screenshots/aiunit-repl/wireframes/01-workspace-overview.png
+wireframeSvgPath: docs/wireframes/aiunit-repl/01-workspace-overview.svg
+resultSchema: |-
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["screenId", "summary", "correctElements", "incorrectElements", "colorAccessibilityValidation", "wireframeSuitability"],
+    "properties": {
+      "screenId": { "type": "string", "minLength": 1 },
+      "summary": { "type": "string", "minLength": 1 },
+      "correctElements": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["element", "requirement", "evidence", "confidence"],
+          "properties": {
+            "element": { "type": "string", "minLength": 1 },
+            "requirement": { "type": "string", "minLength": 1 },
+            "evidence": { "type": "string", "minLength": 1 },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      },
+      "incorrectElements": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["element", "requirement", "expected", "actual", "whyIncorrect", "severity", "confidence"],
+          "properties": {
+            "element": { "type": "string", "minLength": 1 },
+            "requirement": { "type": "string", "minLength": 1 },
+            "expected": { "type": "string", "minLength": 1 },
+            "actual": { "type": "string", "minLength": 1 },
+            "whyIncorrect": { "type": "string", "minLength": 1 },
+            "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      },
+      "colorAccessibilityValidation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["colorsMatchWireframe", "adaCompliant", "deviations", "why"],
+        "properties": {
+          "colorsMatchWireframe": { "type": "boolean" },
+          "adaCompliant": { "type": "boolean" },
+          "deviations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["element", "expected", "actual", "whyDeviationMatters", "severity", "confidence"],
+              "properties": {
+                "element": { "type": "string", "minLength": 1 },
+                "expected": { "type": "string", "minLength": 1 },
+                "actual": { "type": "string", "minLength": 1 },
+                "whyDeviationMatters": { "type": "string", "minLength": 1 },
+                "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          },
+          "why": { "type": "string", "minLength": 1 }
+        }
+      },
+      "wireframeSuitability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rating", "why", "missingRequirements", "recommendedWireframeChanges"],
+        "properties": {
+          "rating": { "type": "string", "enum": ["suitable", "partially_suitable", "unsuitable"] },
+          "why": { "type": "string", "minLength": 1 },
+          "missingRequirements": { "type": "array", "items": { "type": "string" } },
+          "recommendedWireframeChanges": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }

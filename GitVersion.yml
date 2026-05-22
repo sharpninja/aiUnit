@@ -1,0 +1,12 @@
+workflow: GitHubFlow/v1
+next-version: 0.5.0
+mode: ContinuousDelivery
+assembly-versioning-scheme: MajorMinorPatch
+assembly-file-versioning-scheme: MajorMinorPatch
+branches:
+  main:
+    label: beta
+    increment: None
+  pull-request:
+    label: PullRequest{Number}
+    increment: Inherit

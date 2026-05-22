@@ -12,7 +12,6 @@ variables:
   BuildConfiguration: Release
   DotNetSdkVersion: 10.0.x
   NuGetPackageOutput: $(Build.SourcesDirectory)\artifacts\nupkg
-  PackageVersion: 0.1.0-preview.$(Build.BuildId)
 
 pool:
   vmImage: windows-latest
@@ -20,6 +19,7 @@ pool:
 steps:
   - checkout: self
     clean: true
+    fetchDepth: 0
 
   - task: UseDotNet@2
     displayName: Install .NET SDK
@@ -51,13 +51,12 @@ steps:
 
   - pwsh: |
       New-Item -ItemType Directory -Force -Path "$(NuGetPackageOutput)" | Out-Null
-      dotnet pack .\src\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj `
+      dotnet pack .\SharpNinja.aiUnit.sln `
         --configuration $(BuildConfiguration) `
         --no-restore `
         --output "$(NuGetPackageOutput)" `
-        /p:PackageVersion=$(PackageVersion) `
         /p:ContinuousIntegrationBuild=true
-    displayName: Pack NuGet package
+    displayName: Pack NuGet packages
 
   - task: PublishPipelineArtifact@1
     displayName: Publish NuGet package artifact

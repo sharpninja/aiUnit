@@ -23,5 +23,13 @@ TestResults/
 coverage.*
 *.trx
 
+# Generated scratch space
+artifacts/
+
+# Local MCP workspace projections
+mcp.db
+todo-bootstrap.marker
+docs/todo.yaml
+
 AGENTS-README-FIRST.yaml
 .mcpServer/

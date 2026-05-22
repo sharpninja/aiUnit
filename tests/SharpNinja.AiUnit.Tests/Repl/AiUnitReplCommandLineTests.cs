@@ -1,0 +1,163 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Xml.Linq;
+using SharpNinja.AiUnit.Repl;
+using Xunit;
+
+namespace SharpNinja.AiUnit.Tests.Repl;
+
+public sealed class AiUnitReplCommandLineTests
+{
+	[Fact]
+	public void ToolProject_Metadata_PackagesAsAiUnitDotNetTool()
+	{
+		var projectPath = Path.Combine(
+			FindRepoRoot(),
+			"src",
+			"SharpNinja.AiUnit.Repl",
+			"SharpNinja.AiUnit.Repl.csproj");
+		var project = XDocument.Load(projectPath);
+
+		Assert.Equal("Exe", ProjectProperty(project, "OutputType"));
+		Assert.Equal("true", ProjectProperty(project, "PackAsTool"));
+		Assert.Equal("aiunit", ProjectProperty(project, "ToolCommandName"));
+		Assert.Equal("SharpNinja.aiUnit.Tool", ProjectProperty(project, "PackageId"));
+		Assert.DoesNotContain(project.Descendants("Version"), element => element.Parent?.Name == "PropertyGroup");
+		Assert.Contains(
+			project.Descendants("PackageReference"),
+			reference =>
+				reference.Attribute("Include")?.Value == "GitVersion.MsBuild"
+				&& reference.Attribute("Version")?.Value == "6.7.0"
+				&& reference.Attribute("PrivateAssets")?.Value == "All");
+		Assert.Contains(
+			project.Descendants("ProjectReference"),
+			reference => reference.Attribute("Include")?.Value == @"..\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj");
+	}
+
+	[Fact]
+	public async Task ExecuteAsync_Help_PrintsSupportedCommands()
+	{
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		var exitCode = await AiUnitReplCommandLine.ExecuteAsync(new[] { "--help" }, stdout, stderr);
+
+		Assert.Equal(0, exitCode);
+		Assert.Equal(string.Empty, stderr.ToString());
+		Assert.Contains("Usage:", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("repl", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("tui", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("scan", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("--version", stdout.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task ExecuteAsync_Version_PrintsToolVersion()
+	{
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		var exitCode = await AiUnitReplCommandLine.ExecuteAsync(new[] { "--version" }, stdout, stderr);
+
+		Assert.Equal(0, exitCode);
+		Assert.Equal(string.Empty, stderr.ToString());
+		Assert.StartsWith("0.5.0-beta", AiUnitReplCommandLine.ToolVersion, StringComparison.Ordinal);
+		Assert.DoesNotContain("+", AiUnitReplCommandLine.ToolVersion, StringComparison.Ordinal);
+		Assert.Equal($"{AiUnitReplCommandLine.ToolVersion}{Environment.NewLine}", stdout.ToString());
+	}
+
+	[Fact]
+	public void Parse_NoArguments_DefaultsToReplMode()
+	{
+		var result = AiUnitReplCommandLine.Parse(Array.Empty<string>());
+
+		Assert.True(result.Success);
+		Assert.Equal(AiUnitReplMode.Repl, result.Options!.Mode);
+		Assert.False(result.Options.ShowHelp);
+		Assert.False(result.Options.ShowVersion);
+	}
+
+	[Theory]
+	[InlineData("repl", AiUnitReplMode.Repl)]
+	[InlineData("tui", AiUnitReplMode.Tui)]
+	[InlineData("scan", AiUnitReplMode.Scan)]
+	public void Parse_PositionalCommand_SelectsMode(string command, AiUnitReplMode expectedMode)
+	{
+		var result = AiUnitReplCommandLine.Parse(new[] { command });
+
+		Assert.True(result.Success);
+		Assert.Equal(expectedMode, result.Options!.Mode);
+	}
+
+	[Theory]
+	[InlineData("--mode", "tui", AiUnitReplMode.Tui)]
+	[InlineData("--mode", "scan", AiUnitReplMode.Scan)]
+	public void Parse_ModeOption_SelectsMode(string option, string value, AiUnitReplMode expectedMode)
+	{
+		var result = AiUnitReplCommandLine.Parse(new[] { option, value });
+
+		Assert.True(result.Success);
+		Assert.Equal(expectedMode, result.Options!.Mode);
+	}
+
+	[Fact]
+	public async Task ExecuteAsync_Tui_DispatchesShellMode()
+	{
+		var workspacePath = Path.Combine(Path.GetTempPath(), "aiunit-cli-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(workspacePath);
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		try
+		{
+			var exitCode = await AiUnitReplCommandLine.ExecuteAsync(
+				new[] { "tui", "--workspace", workspacePath },
+				stdout,
+				stderr);
+
+			Assert.Equal(0, exitCode);
+			Assert.Equal(string.Empty, stderr.ToString());
+			Assert.Contains("aiunit tui - Workspace Overview", stdout.ToString(), StringComparison.Ordinal);
+			Assert.Contains($"root: {workspacePath}", stdout.ToString(), StringComparison.Ordinal);
+		}
+		finally
+		{
+			Directory.Delete(workspacePath, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task ExecuteAsync_InvalidMode_ReturnsNonZeroAndHelp()
+	{
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		var exitCode = await AiUnitReplCommandLine.ExecuteAsync(new[] { "--mode", "bogus" }, stdout, stderr);
+
+		Assert.Equal(2, exitCode);
+		Assert.Equal(string.Empty, stdout.ToString());
+		Assert.Contains("Unsupported aiUnit mode 'bogus'", stderr.ToString(), StringComparison.Ordinal);
+		Assert.Contains("Usage:", stderr.ToString(), StringComparison.Ordinal);
+	}
+
+	private static string FindRepoRoot()
+	{
+		var directory = new DirectoryInfo(AppContext.BaseDirectory);
+		while (directory is not null)
+		{
+			if (File.Exists(Path.Combine(directory.FullName, "SharpNinja.aiUnit.sln")))
+			{
+				return directory.FullName;
+			}
+
+			directory = directory.Parent;
+		}
+
+		throw new InvalidOperationException("Could not locate repository root from test output directory.");
+	}
+
+	private static string ProjectProperty(XContainer project, string name) =>
+		project.Descendants(name).Single().Value;
+}

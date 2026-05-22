@@ -7,7 +7,6 @@
 		<IsPackable>true</IsPackable>
 		<RootNamespace>SharpNinja.AiUnit</RootNamespace>
 		<PackageId>SharpNinja.aiUnit</PackageId>
-		<Version>0.1.0-preview.1</Version>
 		<Authors>SharpNinja</Authors>
 		<Company>SharpNinja</Company>
 		<Description>xUnit extension for AI frontier-model regression testing. HTTP adapters (Anthropic, OpenAI-compatible, Gemini) + CLI strategies (claude, codex), strategy resolver, auto-skip when no strategy resolves.</Description>
@@ -27,6 +26,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="GitVersion.MsBuild" Version="6.7.0" PrivateAssets="All" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
 		<PackageReference Include="xunit.extensibility.core" Version="2.9.2" />

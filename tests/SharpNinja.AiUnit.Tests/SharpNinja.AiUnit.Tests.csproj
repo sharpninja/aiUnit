@@ -18,6 +18,7 @@
 		<PackageReference Include="NSubstitute" Version="5.3.0" />
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+		<PackageReference Include="YamlDotNet" Version="18.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -26,10 +27,12 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj" />
+		<ProjectReference Include="..\..\src\SharpNinja.AiUnit.Repl\SharpNinja.AiUnit.Repl.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="..\..\samples\appsettings.aiunit.json" Link="appsettings.aiunit.json" CopyToOutputDirectory="PreserveNewest" />
+		<None Update="AiUnitReplWireframeComparisons\*.yaml" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 </Project>

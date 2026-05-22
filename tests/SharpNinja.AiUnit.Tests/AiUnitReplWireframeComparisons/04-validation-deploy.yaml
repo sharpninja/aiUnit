@@ -1,0 +1,106 @@
+screenId: validation-deploy
+wireframeBaselineVersion: svg-1
+title: Validation and deploy
+prompt: |-
+  Compare the finished aiUnit terminal screenshot against the rendered PNG baseline from the canonical SVG wireframe for the Validation and Deploy screen.
+  Validate that the actual screen preserves validation gate rows, pass/pending states, artifact references, screenshot/comparison/package gates, and command affordances. Treat minor terminal styling differences as acceptable unless they hide or remove a required control, state, or label.
+functionalRequirements:
+- id: FR-AIUNITREPL-004
+  text: Provide a TUI validation/deploy status screen.
+- id: FR-AIUNITREPL-008
+  text: Package and publish the tool as a NuGet dotnet tool.
+- id: FR-AIUNITREPL-009
+  text: Provide SVG wireframes and capture finished TUI screenshots for each wireframe.
+- id: FR-AIUNITREPL-010
+  text: Compare finished TUI screenshots to wireframes with aiUnit using RiskyStars-style YAML scenarios and strict JSON validation.
+technicalRequirements:
+- id: TR-AIUNITREPL-007
+  text: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
+- id: TR-AIUNITREPL-008
+  text: aiUnit comparison tests must auto-skip when no strategy resolves, fail invalid JSON, and write comparison result artifacts when enabled.
+- id: TR-AIUNITREPL-010
+  text: CI must restore, test, pack, and publish the dotnet tool only from the intended branch/version flow.
+agentsReadmeFirstPath: AGENTS-README-FIRST.yaml
+actualScreenshotPath: docs/screenshots/aiunit-repl/04-validation-deploy.png
+wireframeScreenshotPath: docs/screenshots/aiunit-repl/wireframes/04-validation-deploy.png
+wireframeSvgPath: docs/wireframes/aiunit-repl/04-validation-deploy.svg
+resultSchema: |-
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["screenId", "summary", "correctElements", "incorrectElements", "colorAccessibilityValidation", "wireframeSuitability"],
+    "properties": {
+      "screenId": { "type": "string", "minLength": 1 },
+      "summary": { "type": "string", "minLength": 1 },
+      "correctElements": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["element", "requirement", "evidence", "confidence"],
+          "properties": {
+            "element": { "type": "string", "minLength": 1 },
+            "requirement": { "type": "string", "minLength": 1 },
+            "evidence": { "type": "string", "minLength": 1 },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      },
+      "incorrectElements": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["element", "requirement", "expected", "actual", "whyIncorrect", "severity", "confidence"],
+          "properties": {
+            "element": { "type": "string", "minLength": 1 },
+            "requirement": { "type": "string", "minLength": 1 },
+            "expected": { "type": "string", "minLength": 1 },
+            "actual": { "type": "string", "minLength": 1 },
+            "whyIncorrect": { "type": "string", "minLength": 1 },
+            "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      },
+      "colorAccessibilityValidation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["colorsMatchWireframe", "adaCompliant", "deviations", "why"],
+        "properties": {
+          "colorsMatchWireframe": { "type": "boolean" },
+          "adaCompliant": { "type": "boolean" },
+          "deviations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["element", "expected", "actual", "whyDeviationMatters", "severity", "confidence"],
+              "properties": {
+                "element": { "type": "string", "minLength": 1 },
+                "expected": { "type": "string", "minLength": 1 },
+                "actual": { "type": "string", "minLength": 1 },
+                "whyDeviationMatters": { "type": "string", "minLength": 1 },
+                "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          },
+          "why": { "type": "string", "minLength": 1 }
+        }
+      },
+      "wireframeSuitability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rating", "why", "missingRequirements", "recommendedWireframeChanges"],
+        "properties": {
+          "rating": { "type": "string", "enum": ["suitable", "partially_suitable", "unsuitable"] },
+          "why": { "type": "string", "minLength": 1 },
+          "missingRequirements": { "type": "array", "items": { "type": "string" } },
+          "recommendedWireframeChanges": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
