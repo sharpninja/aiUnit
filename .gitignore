@@ -22,6 +22,7 @@ Thumbs.db
 TestResults/
 coverage.*
 *.trx
+NoTruckMateLeakTests.cs
 
 # Generated scratch space
 artifacts/

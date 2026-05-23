@@ -1,4 +1,8 @@
 - [Home](Home)
+- [Configuration](Configuration)
+- [Review Attributes](Review-Attributes)
+- [CLI and TUI](CLI-and-TUI)
+- [Requirements](Requirements)
 - [Functional Requirements](Functional-Requirements)
 - [Technical Requirements](Technical-Requirements)
 - [Testing Requirements](Testing-Requirements)

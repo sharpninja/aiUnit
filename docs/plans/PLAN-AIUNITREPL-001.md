@@ -25,16 +25,16 @@ Build a .NET tool named `aiunit` that can run as a REPL, one-shot command proces
 
 ## Technical Requirements
 
-- `TR-AIUNITREPL-001`: Place the executable in a separate console project so `SharpNinja.AiUnit` remains a reusable library package.
-- `TR-AIUNITREPL-002`: Use structured parsers/serializers for JSON configuration instead of string edits.
-- `TR-AIUNITREPL-003`: Keep discovery deterministic and testable through filesystem abstractions or isolated temp directories.
-- `TR-AIUNITREPL-004`: Keep command parsing and TUI operations over a shared application service layer.
-- `TR-AIUNITREPL-005`: Use a proven terminal UI library for TUI rendering unless a repository constraint rules it out during implementation research.
-- `TR-AIUNITREPL-006`: Store backup snapshots beside the target config in a predictable aiUnit-managed location and never overwrite an unverified backup.
-- `TR-AIUNITREPL-007`: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
-- `TR-AIUNITREPL-008`: aiUnit comparison tests must auto-skip when no strategy resolves, fail invalid JSON, and write comparison result artifacts when enabled.
-- `TR-AIUNITREPL-009`: Screenshot capture must use a deterministic terminal size and seeded fixture workspace.
-- `TR-AIUNITREPL-010`: CI must restore, test, pack, and publish the .NET tool package only from the intended branch/version flow.
+- `TR-AIUNIT-REPL-001`: Place the executable in a separate console project so `SharpNinja.AiUnit` remains a reusable library package.
+- `TR-AIUNIT-REPL-002`: Use structured parsers/serializers for JSON configuration instead of string edits.
+- `TR-AIUNIT-REPL-003`: Keep discovery deterministic and testable through filesystem abstractions or isolated temp directories.
+- `TR-AIUNIT-REPL-004`: Keep command parsing and TUI operations over a shared application service layer.
+- `TR-AIUNIT-REPL-005`: Use a proven terminal UI library for TUI rendering unless a repository constraint rules it out during implementation research.
+- `TR-AIUNIT-REPL-006`: Store backup snapshots beside the target config in a predictable aiUnit-managed location and never overwrite an unverified backup.
+- `TR-AIUNIT-REPL-007`: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
+- `TR-AIUNIT-REPL-008`: aiUnit comparison tests must auto-skip when no strategy resolves, fail invalid JSON, and write comparison result artifacts when enabled.
+- `TR-AIUNIT-REPL-009`: Screenshot capture must use a deterministic terminal size and seeded fixture workspace.
+- `TR-AIUNIT-REPL-010`: CI must restore, test, pack, and publish the .NET tool package only from the intended branch/version flow.
 
 ## Implementation Slices
 

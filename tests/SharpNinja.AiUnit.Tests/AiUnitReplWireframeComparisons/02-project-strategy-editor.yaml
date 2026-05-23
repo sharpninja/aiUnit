@@ -14,11 +14,11 @@ functionalRequirements:
 - id: FR-AIUNITREPL-007
   text: Preserve restorable snapshots before mutations and allow restoring individual project settings.
 technicalRequirements:
-- id: TR-AIUNITREPL-002
+- id: TR-AIUNIT-REPL-002
   text: Use structured parsers and serializers for JSON configuration instead of string edits.
-- id: TR-AIUNITREPL-004
+- id: TR-AIUNIT-REPL-004
   text: Keep command parsing and TUI operations over a shared application service layer.
-- id: TR-AIUNITREPL-007
+- id: TR-AIUNIT-REPL-007
   text: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
 agentsReadmeFirstPath: AGENTS-README-FIRST.yaml
 actualScreenshotPath: docs/screenshots/aiunit-repl/02-project-strategy-editor.png

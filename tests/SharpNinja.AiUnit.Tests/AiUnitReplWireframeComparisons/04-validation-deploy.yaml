@@ -14,11 +14,11 @@ functionalRequirements:
 - id: FR-AIUNITREPL-010
   text: Compare finished TUI screenshots to wireframes with aiUnit using RiskyStars-style YAML scenarios and strict JSON validation.
 technicalRequirements:
-- id: TR-AIUNITREPL-007
+- id: TR-AIUNIT-REPL-007
   text: Wireframe comparison scenarios must include prompt, FR/TR rows, AGENTS-README-FIRST path, actual screenshot path, wireframe path, and result schema.
-- id: TR-AIUNITREPL-008
+- id: TR-AIUNIT-REPL-008
   text: aiUnit comparison tests must auto-skip when no strategy resolves, fail invalid JSON, and write comparison result artifacts when enabled.
-- id: TR-AIUNITREPL-010
+- id: TR-AIUNIT-REPL-010
   text: CI must restore, test, pack, and publish the dotnet tool only from the intended branch/version flow.
 agentsReadmeFirstPath: AGENTS-README-FIRST.yaml
 actualScreenshotPath: docs/screenshots/aiunit-repl/04-validation-deploy.png
