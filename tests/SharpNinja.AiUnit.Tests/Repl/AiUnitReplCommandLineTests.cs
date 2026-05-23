@@ -132,6 +132,57 @@ public sealed class AiUnitReplCommandLineTests
 	}
 
 	[Fact]
+	public async Task ExecuteAsync_Repl_ProcessesScriptedCommands()
+	{
+		using var workspace = TempWorkspace.Create();
+		workspace.WriteProjectWithPackage("tests/App.Tests/App.Tests.csproj", "App.Tests");
+		workspace.WriteConfig("tests/App.Tests/appsettings.aiunit.json", Config("codex", "codex", "claude"));
+		using var stdin = new StringReader(
+			"list" + Environment.NewLine +
+			"show App.Tests" + Environment.NewLine +
+			"exit" + Environment.NewLine);
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		var exitCode = await AiUnitReplCommandLine.ExecuteAsync(
+			new[] { "repl", "--workspace", workspace.Root },
+			stdin,
+			stdout,
+			stderr);
+
+		Assert.Equal(0, exitCode);
+		Assert.Equal(string.Empty, stderr.ToString());
+		Assert.Contains("aiunit repl", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("App.Tests | active: codex | status: ok", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("refs: package", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("    - claude", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("    - codex", stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("bye", stdout.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task ExecuteAsync_Repl_ReportsInvalidCommandAndContinues()
+	{
+		using var stdin = new StringReader(
+			"unknown" + Environment.NewLine +
+			"version" + Environment.NewLine +
+			"exit" + Environment.NewLine);
+		using var stdout = new StringWriter();
+		using var stderr = new StringWriter();
+
+		var exitCode = await AiUnitReplCommandLine.ExecuteAsync(
+			new[] { "repl" },
+			stdin,
+			stdout,
+			stderr);
+
+		Assert.Equal(2, exitCode);
+		Assert.Contains("Unknown aiUnit command 'unknown'.", stderr.ToString(), StringComparison.Ordinal);
+		Assert.Contains(AiUnitReplCommandLine.ToolVersion, stdout.ToString(), StringComparison.Ordinal);
+		Assert.Contains("bye", stdout.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
 	public async Task ExecuteAsync_InvalidMode_ReturnsNonZeroAndHelp()
 	{
 		using var stdout = new StringWriter();
@@ -163,4 +214,66 @@ public sealed class AiUnitReplCommandLineTests
 
 	private static string ProjectProperty(XContainer project, string name) =>
 		project.Descendants(name).Single().Value;
+
+	private static string Config(string activeStrategy, params string[] strategies)
+	{
+		var strategyJson = string.Join(
+			$",{Environment.NewLine}",
+			strategies.Select(strategy => $"      \"{strategy}\": {{ \"Kind\": \"cli\", \"Command\": \"{strategy}\" }}"));
+
+		return
+			"{" + Environment.NewLine +
+			"  \"AiUnit\": {" + Environment.NewLine +
+			$"    \"ActiveStrategy\": \"{activeStrategy}\"," + Environment.NewLine +
+			"    \"Strategies\": {" + Environment.NewLine +
+			strategyJson + Environment.NewLine +
+			"    }" + Environment.NewLine +
+			"  }" + Environment.NewLine +
+			"}";
+	}
+
+	private sealed class TempWorkspace : IDisposable
+	{
+		private TempWorkspace(string root)
+		{
+			Root = root;
+		}
+
+		public string Root { get; }
+
+		public static TempWorkspace Create() =>
+			new(Path.Combine(Path.GetTempPath(), "aiunit-cli-" + Guid.NewGuid().ToString("N")));
+
+		public void WriteProjectWithPackage(string relativePath, string assemblyName) =>
+			WriteFile(
+				relativePath,
+				$$"""
+				<Project Sdk="Microsoft.NET.Sdk">
+				  <PropertyGroup>
+				    <AssemblyName>{{assemblyName}}</AssemblyName>
+				  </PropertyGroup>
+				  <ItemGroup>
+				    <PackageReference Include="SharpNinja.aiUnit" Version="0.5.0-beta" />
+				  </ItemGroup>
+				</Project>
+				""");
+
+		public void WriteConfig(string relativePath, string content) =>
+			WriteFile(relativePath, content);
+
+		public void Dispose()
+		{
+			if (Directory.Exists(Root))
+			{
+				Directory.Delete(Root, recursive: true);
+			}
+		}
+
+		private void WriteFile(string relativePath, string content)
+		{
+			var path = Path.Combine(Root, relativePath);
+			Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+			File.WriteAllText(path, content);
+		}
+	}
 }

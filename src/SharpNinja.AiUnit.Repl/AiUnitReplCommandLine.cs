@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace SharpNinja.AiUnit.Repl;
@@ -294,6 +295,36 @@ public static class AiUnitReplCommandLine
 		TextWriter stdout,
 		TextWriter stderr)
 	{
+		return ExecuteAsync(
+			args,
+			TextReader.Null,
+			stdout,
+			stderr,
+			emitPrompt: false);
+	}
+
+	public static Task<int> ExecuteAsync(
+		IReadOnlyList<string> args,
+		TextReader stdin,
+		TextWriter stdout,
+		TextWriter stderr)
+	{
+		return ExecuteAsync(
+			args,
+			stdin,
+			stdout,
+			stderr,
+			emitPrompt: false);
+	}
+
+	public static Task<int> ExecuteAsync(
+		IReadOnlyList<string> args,
+		TextReader stdin,
+		TextWriter stdout,
+		TextWriter stderr,
+		bool emitPrompt)
+	{
+		ArgumentNullException.ThrowIfNull(stdin);
 		ArgumentNullException.ThrowIfNull(stdout);
 		ArgumentNullException.ThrowIfNull(stderr);
 
@@ -319,7 +350,7 @@ public static class AiUnitReplCommandLine
 			return Task.FromResult(0);
 		}
 
-		return Task.FromResult(ExecuteSelectedMode(options, stdout, stderr));
+		return Task.FromResult(ExecuteSelectedMode(options, stdin, stdout, stderr, emitPrompt));
 	}
 
 	public static void WriteHelp(TextWriter writer)
@@ -354,11 +385,15 @@ public static class AiUnitReplCommandLine
 
 	private static int ExecuteSelectedMode(
 		AiUnitReplOptions options,
+		TextReader stdin,
 		TextWriter stdout,
-		TextWriter stderr)
+		TextWriter stderr,
+		bool emitPrompt)
 	{
 		switch (options.Mode)
 		{
+			case AiUnitReplMode.Repl:
+				return RunRepl(options, stdin, stdout, stderr, emitPrompt);
 			case AiUnitReplMode.Scan:
 				WriteScan(options, stdout);
 				return 0;
@@ -380,16 +415,210 @@ public static class AiUnitReplCommandLine
 			case AiUnitReplMode.Restore:
 				return WriteRestore(options, stdout, stderr);
 			default:
-				WriteSelectedMode(options, stdout);
-				return 0;
+				return RunRepl(options, stdin, stdout, stderr, emitPrompt);
 		}
 	}
 
-	private static void WriteSelectedMode(AiUnitReplOptions options, TextWriter stdout)
+	private static int RunRepl(
+		AiUnitReplOptions options,
+		TextReader stdin,
+		TextWriter stdout,
+		TextWriter stderr,
+		bool emitPrompt)
 	{
-		stdout.WriteLine($"aiUnit mode: {ModeName(options.Mode)}");
+		stdout.WriteLine("aiunit repl");
 		stdout.WriteLine($"workspace: {WorkspaceDisplay(options.WorkspacePath)}");
-		stdout.WriteLine("status: shell ready; discovery and TUI operations are implemented in later PLAN-AIUNITREPL-001 slices.");
+		stdout.WriteLine("type 'help' for commands; 'exit' to quit.");
+
+		var exitCode = 0;
+		while (true)
+		{
+			if (emitPrompt)
+			{
+				stdout.Write("aiunit> ");
+				stdout.Flush();
+			}
+
+			var line = stdin.ReadLine();
+			if (line is null)
+			{
+				if (emitPrompt)
+				{
+					stdout.WriteLine();
+				}
+
+				return exitCode;
+			}
+
+			line = line.Trim();
+			if (line.Length == 0)
+			{
+				continue;
+			}
+
+			if (IsExitCommand(line))
+			{
+				stdout.WriteLine("bye");
+				return exitCode;
+			}
+
+			if (IsHelpCommand(line))
+			{
+				WriteReplHelp(stdout);
+				continue;
+			}
+
+			var commandArgs = SplitCommandLine(line, out var splitError);
+			if (splitError is not null)
+			{
+				stderr.WriteLine(splitError);
+				exitCode = 2;
+				continue;
+			}
+
+			if (commandArgs.Count == 0)
+			{
+				continue;
+			}
+
+			if (string.Equals(commandArgs[0], "repl", StringComparison.OrdinalIgnoreCase))
+			{
+				stderr.WriteLine("The REPL is already running. Enter a command or 'exit'.");
+				exitCode = 2;
+				continue;
+			}
+
+			var parsed = Parse(WithWorkspace(commandArgs, options.WorkspacePath));
+			if (!parsed.Success)
+			{
+				stderr.WriteLine(parsed.Error);
+				stderr.WriteLine("type 'help' for commands; 'exit' to quit.");
+				exitCode = parsed.ExitCode;
+				continue;
+			}
+
+			if (parsed.Options!.ShowHelp)
+			{
+				WriteReplHelp(stdout);
+				continue;
+			}
+
+			if (parsed.Options.ShowVersion)
+			{
+				stdout.WriteLine(ToolVersion);
+				continue;
+			}
+
+			if (parsed.Options.Mode == AiUnitReplMode.Repl)
+			{
+				stderr.WriteLine("Enter a command such as scan, list, show, catalog, validate, apply, restore, or tui.");
+				exitCode = 2;
+				continue;
+			}
+
+			var commandExitCode = ExecuteSelectedMode(
+				parsed.Options,
+				TextReader.Null,
+				stdout,
+				stderr,
+				emitPrompt: false);
+			if (commandExitCode != 0)
+			{
+				exitCode = commandExitCode;
+			}
+		}
+	}
+
+	private static void WriteReplHelp(TextWriter writer)
+	{
+		writer.WriteLine("Commands:");
+		writer.WriteLine("  scan | list | catalog | validate");
+		writer.WriteLine("  show <project>");
+		writer.WriteLine("  apply <strategy> --project <project> [--from <project>] [--dry-run] [--force]");
+		writer.WriteLine("  apply-global <strategy> [--from <project>] [--dry-run] [--force]");
+		writer.WriteLine("  restore <project> [--snapshot <path>]");
+		writer.WriteLine("  tui [overview|projects|catalog|validate]");
+		writer.WriteLine("  help | version | exit");
+	}
+
+	private static bool IsExitCommand(string line) =>
+		string.Equals(line, "exit", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(line, "quit", StringComparison.OrdinalIgnoreCase);
+
+	private static bool IsHelpCommand(string line) =>
+		string.Equals(line, "help", StringComparison.OrdinalIgnoreCase)
+		|| string.Equals(line, "?", StringComparison.OrdinalIgnoreCase);
+
+	private static IReadOnlyList<string> SplitCommandLine(string line, out string? error)
+	{
+		var args = new List<string>();
+		var current = new StringBuilder();
+		var inQuotes = false;
+
+		for (var i = 0; i < line.Length; i++)
+		{
+			var character = line[i];
+			if (character == '\\' && inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+			{
+				current.Append('"');
+				i++;
+				continue;
+			}
+
+			if (character == '"')
+			{
+				inQuotes = !inQuotes;
+				continue;
+			}
+
+			if (char.IsWhiteSpace(character) && !inQuotes)
+			{
+				AddCurrent();
+				continue;
+			}
+
+			current.Append(character);
+		}
+
+		if (inQuotes)
+		{
+			error = "Unterminated quoted argument.";
+			return Array.Empty<string>();
+		}
+
+		AddCurrent();
+		error = null;
+		return args;
+
+		void AddCurrent()
+		{
+			if (current.Length == 0)
+			{
+				return;
+			}
+
+			args.Add(current.ToString());
+			current.Clear();
+		}
+	}
+
+	private static IReadOnlyList<string> WithWorkspace(
+		IReadOnlyList<string> args,
+		string? workspacePath)
+	{
+		if (string.IsNullOrWhiteSpace(workspacePath)
+			|| args.Any(arg =>
+				string.Equals(arg, "--workspace", StringComparison.Ordinal)
+				|| arg.StartsWith("--workspace=", StringComparison.Ordinal)))
+		{
+			return args;
+		}
+
+		var merged = new List<string>(args.Count + 2);
+		merged.AddRange(args);
+		merged.Add("--workspace");
+		merged.Add(workspacePath);
+		return merged;
 	}
 
 	private static int WriteTui(

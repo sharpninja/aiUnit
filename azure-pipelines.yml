@@ -2,6 +2,10 @@ trigger:
   branches:
     include:
       - main
+  tags:
+    include:
+      - v*
+      - '[0-9]*'
 
 pr:
   branches:
@@ -51,12 +55,68 @@ steps:
 
   - pwsh: |
       New-Item -ItemType Directory -Force -Path "$(NuGetPackageOutput)" | Out-Null
-      dotnet pack .\SharpNinja.aiUnit.sln `
-        --configuration $(BuildConfiguration) `
-        --no-restore `
-        --output "$(NuGetPackageOutput)" `
-        /p:ContinuousIntegrationBuild=true
+      $packArgs = @(
+        'pack',
+        '.\SharpNinja.aiUnit.sln',
+        '--configuration',
+        '$(BuildConfiguration)',
+        '--no-restore',
+        '--output',
+        '$(NuGetPackageOutput)',
+        '/p:ContinuousIntegrationBuild=true'
+      )
+
+      $sourceBranch = "$(Build.SourceBranch)"
+      if ($sourceBranch -match '^refs/tags/(?<tag>v?\d+\.\d+\.\d+)$') {
+        $releaseVersion = $Matches['tag'] -replace '^v', ''
+        $packArgs += @(
+          "/p:Version=$releaseVersion",
+          "/p:PackageVersion=$releaseVersion",
+          "/p:InformationalVersion=$releaseVersion"
+        )
+      }
+
+      dotnet @packArgs
+      if ($LASTEXITCODE -ne 0) {
+        throw "dotnet pack failed."
+      }
     displayName: Pack NuGet packages
+
+  - pwsh: |
+      $toolPath = Join-Path "$(Agent.TempDirectory)" "aiunit-tool"
+      if (Test-Path -LiteralPath $toolPath) {
+        Remove-Item -LiteralPath $toolPath -Recurse -Force
+      }
+
+      $toolPackage = Get-ChildItem -Path "$(NuGetPackageOutput)" -Filter "SharpNinja.aiUnit.Tool.*.nupkg" |
+        Where-Object { $_.Name -notlike "*.snupkg" } |
+        Sort-Object Name |
+        Select-Object -Last 1
+      if (-not $toolPackage) {
+        throw "SharpNinja.aiUnit.Tool package was not produced."
+      }
+
+      $match = [regex]::Match($toolPackage.BaseName, '^SharpNinja\.aiUnit\.Tool\.(?<version>.+)$')
+      if (-not $match.Success) {
+        throw "Could not parse tool package version from $($toolPackage.Name)."
+      }
+
+      $version = $match.Groups['version'].Value
+      dotnet tool install SharpNinja.aiUnit.Tool --tool-path $toolPath --add-source "$(NuGetPackageOutput)" --version $version
+      if ($LASTEXITCODE -ne 0) {
+        throw "dotnet tool install failed for SharpNinja.aiUnit.Tool $version."
+      }
+
+      & (Join-Path $toolPath "aiunit.exe") --help
+      if ($LASTEXITCODE -ne 0) {
+        throw "Installed aiunit --help smoke test failed."
+      }
+
+      & (Join-Path $toolPath "aiunit.exe") --version
+      if ($LASTEXITCODE -ne 0) {
+        throw "Installed aiunit --version smoke test failed."
+      }
+    displayName: Smoke test packed aiunit tool
 
   - task: PublishPipelineArtifact@1
     displayName: Publish NuGet package artifact
@@ -65,8 +125,8 @@ steps:
       artifactName: aiUnit-nuget
 
   - task: PowerShell@2
-    displayName: Push to NuGet (main only)
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    displayName: Push to NuGet (version tags only)
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     env:
       NUGET_API_KEY: $(NuGetApiKey)
     inputs:
@@ -78,8 +138,41 @@ steps:
           exit 0
         }
 
+        $tag = "$(Build.SourceBranch)" -replace '^refs/tags/', ''
+        if ($tag -notmatch '^v?\d+\.\d+\.\d+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$') {
+          Write-Host "Tag '$tag' is not a version tag; skipping nuget.org publish."
+          exit 0
+        }
+
+        if ($tag -match '-') {
+          throw "Tag '$tag' is a prerelease tag. Full release publish requires a stable version tag like v1.2.3."
+        }
+
+        $expectedVersion = $tag -replace '^v', ''
         $packages = Get-ChildItem -Path "$(Build.SourcesDirectory)/artifacts/nupkg" -Filter *.nupkg | Select-Object -ExpandProperty FullName
         foreach ($package in $packages) {
+          $packageName = Split-Path -Leaf $package
+          $baseName = [System.IO.Path]::GetFileNameWithoutExtension($packageName)
+          $packageVersion = $null
+          foreach ($prefix in @('SharpNinja.aiUnit.Tool.', 'SharpNinja.aiUnit.')) {
+            if ($baseName.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+              $packageVersion = $baseName.Substring($prefix.Length)
+              break
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($packageVersion)) {
+            throw "Could not parse package version from $packageName."
+          }
+
+          if ($packageVersion -ne $expectedVersion) {
+            throw "Version tag '$tag' produced $packageName version '$packageVersion'; expected '$expectedVersion'."
+          }
+
+          if ($packageVersion -match '-') {
+            throw "Version tag '$tag' produced prerelease package $packageName."
+          }
+
           dotnet nuget push $package --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY --skip-duplicate
           if ($LASTEXITCODE -ne 0) {
             throw "dotnet nuget push failed for $package"

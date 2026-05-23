@@ -128,4 +128,4 @@ Build a .NET tool named `aiunit` that can run as a REPL, one-shot command proces
 
 ## Current Status
 
-Slices 1 through 8 are implemented and validated. Slice 9 remains: pack the NuGet .NET tool, smoke-install it from the local package source, run installed command smoke checks, and complete the MCP TODO after final validation.
+Slice 9 packaging and publish validation is implemented. The REPL now runs a command loop over the existing one-shot commands, the packed .NET tool is smoke-installed from a local package source, and stable version tags produce full-release NuGet package versions before publish. Direct `set-active`, `add-strategy`, `edit-strategy`, `remove-strategy`, and `export` command aliases remain a follow-up if FR-AIUNITREPL-003 still requires those exact command names.
