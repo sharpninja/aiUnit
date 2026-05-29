@@ -130,7 +130,7 @@
 
 ## TR-AIUNIT-REVIEW-001
 
-**Stackable review DataAttributes** — CodeReviewAttribute, PlanReviewAttribute, and ProjectReviewAttribute inherit a common AiReviewAttribute with AttributeUsage AllowMultiple=true and yield object rows containing prompt and result JSON.
+**Stackable review DataAttributes** — AiCodeReviewAttribute, AiPlanReviewAttribute, and AiProjectReviewAttribute inherit a common AiReviewAttribute with AttributeUsage AllowMultiple=true and yield object rows containing prompt and result JSON.
 
 ## TR-AIUNIT-REVIEW-002
 

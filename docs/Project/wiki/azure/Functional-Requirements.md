@@ -78,11 +78,11 @@ aiUnit must build and pack as a standalone repository without upward project ref
 
 ## FR-AIUNIT-021 Review attributes execute configured AI reviews
 
-aiUnit exposes CodeReview, PlanReview, and ProjectReview attributes that can be stacked on xUnit theory methods. Each attribute accepts a prompt string, falls back to a canned prompt when null or empty, resolves configured or inline agent details, and passes the effective prompt plus review result JSON as the decorated method data row.
+aiUnit exposes AiCodeReview, AiPlanReview, and AiProjectReview attributes that can be stacked on xUnit theory methods. Each attribute accepts a prompt string, falls back to a canned prompt when null or empty, resolves configured or inline agent details, and passes the effective prompt plus review result JSON as the decorated method data row.
 
 ## FR-AIUNIT-022 Default review prompts are YAML-backed
 
-CodeReviewAttribute, PlanReviewAttribute, and ProjectReviewAttribute must use built-in YAML prompt files for their null or empty prompt fallback instead of hardcoded inline prompt text.
+AiCodeReviewAttribute, AiPlanReviewAttribute, and AiProjectReviewAttribute must use built-in YAML prompt files for their null or empty prompt fallback instead of hardcoded inline prompt text.
 
 ## FR-AIUNIT-023 Azure pipeline publishes NuGet packages from version tags
 

@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.10.0] - 2026-05-29
+
 ### Changed
 - **BREAKING:** Review attributes now carry the `Ai` prefix for consistency with
   `[AiFact]` and `[AiTheory]`: `[CodeReview]` becomes `[AiCodeReview]`,
