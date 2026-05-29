@@ -62,7 +62,7 @@ public sealed class AiReviewAttributeTests
 	[Fact]
 	public void CodeReview_EmptyPrompt_UsesYamlDefaultPrompt()
 	{
-		var attr = new CodeReviewAttribute("");
+		var attr = new AiCodeReviewAttribute("");
 
 		var request = attr.CreateExecutionRequest();
 
@@ -114,7 +114,7 @@ public sealed class AiReviewAttributeTests
 	[Fact]
 	public void PlanReview_CustomPrompt_IsPreserved()
 	{
-		var attr = new PlanReviewAttribute("Review the release checklist.");
+		var attr = new AiPlanReviewAttribute("Review the release checklist.");
 
 		var request = attr.CreateExecutionRequest();
 
@@ -125,21 +125,21 @@ public sealed class AiReviewAttributeTests
 	[Fact]
 	public void ReviewAttributes_AreStackableDataAttributes()
 	{
-		var usage = typeof(CodeReviewAttribute).GetCustomAttribute<AttributeUsageAttribute>();
+		var usage = typeof(AiCodeReviewAttribute).GetCustomAttribute<AttributeUsageAttribute>();
 
 		Assert.NotNull(usage);
 		Assert.True(usage!.AllowMultiple);
 		Assert.Equal(AttributeTargets.Method, usage.ValidOn);
-		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(CodeReviewAttribute)));
-		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(PlanReviewAttribute)));
-		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(ProjectReviewAttribute)));
+		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(AiCodeReviewAttribute)));
+		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(AiPlanReviewAttribute)));
+		Assert.True(typeof(DataAttribute).IsAssignableFrom(typeof(AiProjectReviewAttribute)));
 	}
 
 	[Fact]
 	public void Attribute_CreatesTwoParameterDataRow()
 	{
 		var resolver = new FakeResolver();
-		var attr = new CodeReviewAttribute("Review this method.");
+		var attr = new AiCodeReviewAttribute("Review this method.");
 
 		var row = attr.GetData(resolver);
 
@@ -183,7 +183,7 @@ public sealed class AiReviewAttributeTests
 	[Fact]
 	public void Attribute_AgentDetails_CreateExecutionRequest()
 	{
-		var attr = new ProjectReviewAttribute("Review packaging.")
+		var attr = new AiProjectReviewAttribute("Review packaging.")
 		{
 			Agent = "codex",
 			Kind = "cli",

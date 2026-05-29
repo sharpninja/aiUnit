@@ -617,9 +617,9 @@ agents.
 
 | Attribute | Built-in prompt |
 |-----------|----------------|
-| `[CodeReview]` | Structured code quality, correctness, and security analysis. |
-| `[PlanReview]` | Implementation plan feasibility and completeness review. |
-| `[ProjectReview]` | High-level project health and architecture assessment. |
+| `[AiCodeReview]` | Structured code quality, correctness, and security analysis. |
+| `[AiPlanReview]` | Implementation plan feasibility and completeness review. |
+| `[AiProjectReview]` | High-level project health and architecture assessment. |
 
 ### Basic usage
 
@@ -631,7 +631,7 @@ using Xunit;
 public class ReviewTests
 {
     [Theory]
-    [CodeReview]
+    [AiCodeReview]
     public void CodeReview_NoBlockingFindings(string prompt, string resultJson)
     {
         using var doc = JsonDocument.Parse(resultJson);
@@ -656,7 +656,7 @@ public class ReviewTests
 Pass a string to override the built-in prompt:
 
 ```csharp
-[CodeReview("Focus specifically on error-handling coverage and null-safety.")]
+[AiCodeReview("Focus specifically on error-handling coverage and null-safety.")]
 public void Review_NullSafety(string prompt, string resultJson) { ... }
 ```
 
@@ -664,13 +664,13 @@ public void Review_NullSafety(string prompt, string resultJson) { ... }
 
 ```csharp
 // Single named strategy
-[CodeReview(Agent = "claude")]
+[AiCodeReview(Agent = "claude")]
 
 // Multiple agents - findings are aggregated
-[CodeReview(Agents = new[] { "claude", "codex-subscription" })]
+[AiCodeReview(Agents = new[] { "claude", "codex-subscription" })]
 
 // Inline agent (no appsettings entry required)
-[CodeReview(Kind = "cli", Command = "claude", Model = "claude-opus-4-5")]
+[AiCodeReview(Kind = "cli", Command = "claude", Model = "claude-opus-4-5")]
 ```
 
 ### Review result JSON schema

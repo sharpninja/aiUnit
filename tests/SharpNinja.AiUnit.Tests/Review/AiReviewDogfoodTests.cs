@@ -10,9 +10,9 @@ public sealed class AiReviewDogfoodTests
 	private const string MissingReviewAgent = "__aiunit_dogfood_missing_agent__";
 
 	[Theory]
-	[CodeReview("Dogfood code review: review the AiReview attribute data-row contract.", Agent = MissingReviewAgent)]
-	[PlanReview("Dogfood plan review: review the PLAN-AIUNITREPL-001 validation gates.", Agent = MissingReviewAgent)]
-	[ProjectReview("Dogfood project review: review aiUnit package readiness.", Agent = MissingReviewAgent)]
+	[AiCodeReview("Dogfood code review: review the AiReview attribute data-row contract.", Agent = MissingReviewAgent)]
+	[AiPlanReview("Dogfood plan review: review the PLAN-AIUNITREPL-001 validation gates.", Agent = MissingReviewAgent)]
+	[AiProjectReview("Dogfood project review: review aiUnit package readiness.", Agent = MissingReviewAgent)]
 	public void ReviewAttributes_DogfoodCustomPrompts_PassPromptAndResultJsonToDecoratedMethod(
 		string prompt,
 		string resultJson)
@@ -47,9 +47,9 @@ public sealed class AiReviewDogfoodTests
 	}
 
 	[Theory]
-	[CodeReview(Agent = MissingReviewAgent)]
-	[PlanReview(Agent = MissingReviewAgent)]
-	[ProjectReview(Agent = MissingReviewAgent)]
+	[AiCodeReview(Agent = MissingReviewAgent)]
+	[AiPlanReview(Agent = MissingReviewAgent)]
+	[AiProjectReview(Agent = MissingReviewAgent)]
 	public void ReviewAttributes_DogfoodDefaultPrompts_UseScopeSpecificCannedPrompt(
 		string prompt,
 		string resultJson)

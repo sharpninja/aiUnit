@@ -9,6 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING:** Review attributes now carry the `Ai` prefix for consistency with
+  `[AiFact]` and `[AiTheory]`: `[CodeReview]` becomes `[AiCodeReview]`,
+  `[PlanReview]` becomes `[AiPlanReview]`, and `[ProjectReview]` becomes
+  `[AiProjectReview]`. The backing classes are renamed to `AiCodeReviewAttribute`,
+  `AiPlanReviewAttribute`, and `AiProjectReviewAttribute`. The shared base class
+  `AiReviewAttribute` is unchanged. Update test method attributes when upgrading.
+
+---
+
+## [0.9.0] - 2026-05-29
+
 ### Added
 - **Resilience pipeline** (Polly.Core 8.5.0): every `IFrontierModelClient.SendAsync`
   call is now automatically wrapped in a per-attempt timeout, retry with exponential
