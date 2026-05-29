@@ -313,82 +313,293 @@ if (response.Error is { } err)
 
 ## Resilience Pipeline
 
-Every AI call is automatically wrapped in a configurable Polly v8 resilience pipeline.
-The pipeline is always on by default with safe library defaults.
+Every AI call is automatically wrapped in a [Polly v8](https://github.com/App-vNext/Polly)
+resilience pipeline. The pipeline is enabled by default using safe library defaults and
+requires no configuration to get started.
 
-### Pipeline stages (outer to inner)
+### Pipeline stages
 
-| Stage | Behavior |
-|-------|----------|
-| **Fallback** (optional) | When the circuit opens, routes the call to an alternate strategy instead of failing. Only active when `FallbackStrategy` is set. |
-| **Circuit breaker** | Opens after `BreakAfterConsecutiveFailures` consecutive failures and stays open for `BreakDurationSeconds`. Prevents hammering a failing endpoint. |
-| **Retry** | Retries `MaxRetries` times on transient failures with configurable backoff and jitter. |
-| **Timeout** | Cancels each attempt after `TimeoutSeconds` seconds. Per-attempt, not total. |
+The pipeline applies four stages in order, outermost first:
+
+```
+caller
+  └─ Fallback (optional)       ← catches open-circuit exceptions; routes to alternate strategy
+       └─ Circuit Breaker       ← opens after N consecutive failures
+            └─ Retry            ← retries on transient errors with backoff
+                 └─ Timeout     ← cancels each attempt after TimeoutSeconds
+                      └─ IFrontierModelClient.SendAsync
+```
+
+| Stage | Default behavior |
+|-------|-----------------|
+| **Timeout** | Cancels the attempt after `TimeoutSeconds`. Per-attempt, not total call time. When the timeout fires, the error code is `"timeout"`. |
+| **Retry** | Retries up to `MaxRetries` times on transient errors. Uses `RetryBackoff` with optional jitter. Delay starts at `RetryBaseDelayMs`. |
+| **Circuit Breaker** | Opens after `BreakAfterConsecutiveFailures` consecutive failures. Stays open for `BreakDurationSeconds`. While open, calls return `"circuit_open"` without invoking the model. |
+| **Fallback** | Only active when `FallbackStrategy` is set. When the circuit is open, routes the call to the named fallback strategy instead of returning an error. |
+
+### Configuration layers
+
+Resilience options are resolved at three levels, with the most specific winning:
+
+```
+[AiFact(TimeoutSeconds = 300)]     ← 3. per-test attribute (highest priority)
+appsettings.aiunit.json             ← 2. strategy TimeoutSeconds
+ResilienceOptions.LibraryDefault    ← 1. library defaults (lowest priority)
+```
+
+Only `TimeoutSeconds` flows from `appsettings.aiunit.json` into the pipeline. All
+other options use library defaults unless overridden per-test.
 
 ### Library defaults
 
-| Option | Default |
-|--------|---------|
-| `ResilienceEnabled` | `true` |
-| `TimeoutSeconds` | 180 (per attempt; overridden by strategy `TimeoutSeconds`) |
-| `MaxRetries` | 1 |
-| `RetryBaseDelayMs` | 2000 |
-| `RetryBackoff` | `"exponential"` |
-| `BreakAfterConsecutiveFailures` | 5 |
-| `BreakDurationSeconds` | 30 |
-| `FallbackStrategy` | `null` (disabled) |
+| Option | Default | Notes |
+|--------|---------|-------|
+| `ResilienceEnabled` | `true` | Set `false` to bypass the pipeline entirely. |
+| `TimeoutSeconds` | 180 s | Overridden by strategy `TimeoutSeconds` from config. |
+| `MaxRetries` | 1 | 0 means no retry; Polly skips the retry stage entirely. |
+| `RetryBaseDelayMs` | 2000 ms | Starting delay before the first retry. |
+| `RetryBackoff` | `"exponential"` | See backoff reference below. |
+| `BreakAfterConsecutiveFailures` | 5 | Consecutive failures before circuit opens. |
+| `BreakDurationSeconds` | 30 s | How long the circuit stays open before allowing one probe. |
+| `FallbackStrategy` | `null` | Name of a configured strategy to use when circuit is open. |
 
-The strategy `TimeoutSeconds` from your config file is automatically used as the
-per-attempt timeout, overriding the 180 s library default. If your strategy sets
-`TimeoutSeconds: 900`, every attempt gets 900 s before timing out.
+### Strategy-level timeout
 
-### Transient vs. non-transient errors
+The `TimeoutSeconds` value from `appsettings.aiunit.json` is the primary timeout knob.
+Set it to match your model's expected response time:
 
-Retried on transient errors: `server_error`, `network`, `timeout`, `malformed_response`,
-`empty_response`.
-
-Not retried: `auth`, `rate_limit`, `AttachmentTooLarge`, `spawn_failed`. These are
-surfaced immediately because retrying cannot fix them.
-
-### Per-test resilience overrides
-
-Override individual options on `[AiFact]` or `[AiTheory]`:
-
-```csharp
-// Give this specific test a longer timeout and more retries.
-[AiFact(TimeoutSeconds = 300, MaxRetries = 3)]
-public async Task LongRunningAnalysis()
+```json
 {
-    var response = await AiStrategyFixture.Default.ExecuteAsync(
-        new FrontierRequest("Analyze deeply.", input),
-        attribute.GetResilienceOptions(AiStrategyFixture.Default.StrategyResilienceOptions));
-    // ...
+  "AiUnit": {
+    "Strategies": {
+      "claude": {
+        "Kind": "cli",
+        "Command": "claude",
+        "TimeoutSeconds": 900,
+        "Temperature": 0.0
+      },
+      "gemini-flash": {
+        "Kind": "gemini",
+        "Model": "gemini-2.5-flash",
+        "ApiKeyEnvVar": "GOOGLE_API_KEY",
+        "TimeoutSeconds": 60
+      }
+    }
+  }
 }
 ```
 
-Available per-test options on both `[AiFact]` and `[AiTheory]`:
+With `TimeoutSeconds: 900`, every attempt may run for up to 15 minutes before Polly
+cancels it and counts it as a timeout failure.
 
-| Property | Type | Sentinel | Description |
-|----------|------|---------|-------------|
-| `TimeoutSeconds` | `int` | `-1` | Per-attempt timeout in seconds. |
-| `MaxRetries` | `int` | `-1` | Retry attempts on transient failure. |
-| `RetryBaseDelayMs` | `int` | `-1` | Base retry delay in milliseconds. |
-| `RetryBackoff` | `string?` | `null` | `"exponential"`, `"linear"`, or `"constant"`. |
-| `BreakAfterConsecutiveFailures` | `int` | `-1` | Failures before circuit opens. |
-| `BreakDurationSeconds` | `int` | `-1` | Seconds the circuit stays open. |
-| `FallbackStrategy` | `string?` | `null` | Named strategy to fall back to. |
-| `ResilienceEnabled` | `bool?` | `null` | `false` disables the pipeline entirely for this test. |
+### Retry and backoff
 
-Sentinel values (`-1` / `null`) inherit from the strategy config; set a positive value
-to override for a specific test.
+When a transient error occurs, the retry stage waits before the next attempt.
 
-### Disabling resilience for a test
+**Backoff strategies:**
+
+| `RetryBackoff` | Behavior | Delays (base=2000 ms, with jitter) |
+|----------------|----------|-----------------------------------|
+| `"exponential"` | Delay doubles each attempt; jitter added | ~2 s, ~4 s, ~8 s, ... |
+| `"linear"` | Delay grows linearly | ~2 s, ~4 s, ~6 s, ... |
+| `"constant"` | Same delay every attempt; no jitter | 2 s, 2 s, 2 s, ... |
+
+Jitter (exponential only) spreads retries across a distributed test run to avoid the
+thundering-herd problem. With `RetryBaseDelayMs: 2000` and `MaxRetries: 1`, a single
+transient failure adds roughly 2 seconds before the retry attempt.
+
+**Transient errors (retried):**
+
+| Error code | Cause |
+|------------|-------|
+| `server_error` | HTTP 5xx or equivalent CLI failure |
+| `network` | Connection failure, DNS failure |
+| `timeout` | Per-attempt timeout fired |
+| `malformed_response` | Model returned unparseable output |
+| `empty_response` | Model returned an empty or null response |
+
+**Non-transient errors (not retried):**
+
+| Error code | Cause |
+|------------|-------|
+| `auth` | Invalid or expired API key |
+| `rate_limit` | HTTP 429 or equivalent |
+| `AttachmentTooLarge` | Attachment exceeded the 5 MB limit |
+| `spawn_failed` | CLI executable not found or failed to start |
+
+Non-transient errors are surfaced immediately to the caller. Retrying cannot fix an
+authentication failure or a too-large attachment.
+
+### Circuit breaker behavior
+
+The circuit breaker tracks whether the last N calls all failed. When the failure ratio
+reaches 100% over the minimum throughput window, the circuit opens.
+
+**Open state:** calls return `FrontierError("circuit_open", ...)` without touching the
+model. This protects a failing endpoint from a flood of parallel test calls.
+
+**Half-open probe:** after `BreakDurationSeconds`, the circuit enters half-open and
+allows one probe call. If it succeeds, the circuit closes. If it fails, the circuit
+opens again for another `BreakDurationSeconds`.
+
+**Tuning for test suites:** with `BreakAfterConsecutiveFailures: 5` and a fast test
+suite, the circuit can open in seconds. If parallel test execution causes spurious
+circuit trips, increase `BreakAfterConsecutiveFailures` or set it per-test for
+stability-sensitive tests.
+
+### Fallback strategy
+
+When `FallbackStrategy` names a configured strategy, the pipeline routes to that
+strategy whenever the primary circuit is open:
+
+```json
+{
+  "AiUnit": {
+    "ActiveStrategy": "grok",
+    "Strategies": {
+      "grok": {
+        "Kind": "openai-compatible",
+        "BaseUrl": "https://api.x.ai",
+        "Model": "grok-4",
+        "ApiKeyEnvVar": "XAI_API_KEY",
+        "TimeoutSeconds": 120
+      },
+      "claude": {
+        "Kind": "cli",
+        "Command": "claude",
+        "TimeoutSeconds": 900
+      }
+    }
+  }
+}
+```
 
 ```csharp
-[AiFact(ResilienceEnabled = false)]
-public async Task DirectCall_NoRetry()
+[AiFact]
+public async Task Analysis_WithFallback()
 {
-    // Pipeline bypassed; the raw client is called directly.
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+    {
+        FallbackStrategy = "claude",        // fall back to Claude if Grok circuit opens
+        BreakAfterConsecutiveFailures = 3,
+        BreakDurationSeconds = 60
+    };
+    var response = await AiStrategyFixture.Default.ExecuteAsync(
+        new FrontierRequest("sys", "user"), opts);
+
+    Assert.Null(response.Error);
+}
+```
+
+Fallback invocation is transparent: the response comes back as if the primary strategy
+had succeeded, with no change to the calling code.
+
+### Per-test configuration
+
+Override any option for a single test by building a modified `ResilienceOptions` from
+the strategy baseline and passing it to `ExecuteAsync`:
+
+```csharp
+[AiFact]
+public async Task LongRunningAnalysis()
+{
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+    {
+        TimeoutSeconds = 600,       // 10-minute budget for this specific test
+        MaxRetries = 3,             // extra retries for a slow or flaky endpoint
+        RetryBaseDelayMs = 5000,    // wait 5 s before first retry
+        RetryBackoff = "constant"   // predictable delay, no jitter
+    };
+
+    var response = await AiStrategyFixture.Default.ExecuteAsync(
+        new FrontierRequest("Analyze this large codebase thoroughly.", codeInput),
+        opts);
+
+    Assert.Null(response.Error);
+}
+```
+
+`StrategyResilienceOptions` is the resolved baseline (strategy `TimeoutSeconds` +
+library defaults). The `with` expression overrides only the fields you specify; all
+others inherit from the strategy.
+
+Available options:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ResilienceEnabled` | `bool` | `false` bypasses the entire pipeline for this call. |
+| `TimeoutSeconds` | `int` | Per-attempt timeout in seconds. |
+| `MaxRetries` | `int` | Retry attempts on transient failure. `0` skips the retry stage. |
+| `RetryBaseDelayMs` | `int` | Base delay in milliseconds before the first retry. |
+| `RetryBackoff` | `string` | `"exponential"`, `"linear"`, or `"constant"`. |
+| `BreakAfterConsecutiveFailures` | `int` | Consecutive failures before the circuit opens. |
+| `BreakDurationSeconds` | `int` | Seconds the circuit stays open. |
+| `FallbackStrategy` | `string?` | Named strategy to route to when circuit is open. |
+
+### Common scenarios
+
+**Slow model - extend the timeout:**
+```csharp
+[AiFact]
+public async Task DeepAnalysis_ExtendedTimeout()
+{
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+        { TimeoutSeconds = 600 };
+    var resp = await AiStrategyFixture.Default.ExecuteAsync(req, opts);
+}
+```
+
+**Flaky endpoint - more retries with longer delays:**
+```csharp
+[AiFact]
+public async Task FlakyEndpoint_ExtraRetries()
+{
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+    {
+        MaxRetries = 5,
+        RetryBaseDelayMs = 10_000,
+        RetryBackoff = "exponential"
+    };
+    var resp = await AiStrategyFixture.Default.ExecuteAsync(req, opts);
+}
+```
+
+**Integration test - isolate from shared circuit state:**
+```csharp
+[AiFact]
+public async Task IntegrationTest_IsolatedCircuit()
+{
+    // High threshold so this test doesn't trip the shared breaker.
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+        { BreakAfterConsecutiveFailures = 100 };
+    var resp = await AiStrategyFixture.Default.ExecuteAsync(req, opts);
+}
+```
+
+**No pipeline - direct call:**
+```csharp
+[AiFact]
+public async Task TimingBenchmark_NoPipeline()
+{
+    // Bypass everything; raw client call for latency measurement.
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+        { ResilienceEnabled = false };
+    var resp = await AiStrategyFixture.Default.ExecuteAsync(req, opts);
+}
+```
+
+**Fallback to cheaper model:**
+```csharp
+[AiFact]
+public async Task CostSensitive_FallsBackToFlash()
+{
+    var opts = AiStrategyFixture.Default.StrategyResilienceOptions with
+    {
+        FallbackStrategy = "gemini-flash",
+        BreakAfterConsecutiveFailures = 2
+    };
+    var resp = await AiStrategyFixture.Default.ExecuteAsync(req, opts);
+    Assert.Null(resp.Error);
 }
 ```
 
@@ -641,26 +852,31 @@ public class ProductionModelTests
 }
 ```
 
-### Using `ExecuteAsync` with per-test resilience options
+### Combining collection fixtures with per-test resilience
 
-`AiStrategyFixture.ExecuteAsync` accepts an optional `ResilienceOptions` to build a
-temporary pipeline for a single call:
+Inject the shared fixture through the collection, then build a per-test
+`ResilienceOptions` for calls that need non-default behavior:
 
 ```csharp
-[AiFact(TimeoutSeconds = 300, MaxRetries = 3)]
-public async Task SlowTest_UsesLongTimeout()
+[Collection("AI")]
+public class ProductionModelTests
 {
-    var attr  = (AiFactAttribute)GetType()
-        .GetMethod(nameof(SlowTest_UsesLongTimeout))!
-        .GetCustomAttributes(typeof(AiFactAttribute), false)[0];
+    private readonly AiStrategyFixture _fx;
+    public ProductionModelTests(AiStrategyFixture fx) => _fx = fx;
 
-    var opts  = attr.GetResilienceOptions(
-        AiStrategyFixture.Default.StrategyResilienceOptions);
+    [AiFact]
+    public async Task SlowAnalysis_ExtendedTimeout()
+    {
+        var opts = _fx.StrategyResilienceOptions with
+        {
+            TimeoutSeconds = 600,
+            MaxRetries = 3
+        };
+        var resp = await _fx.ExecuteAsync(
+            new FrontierRequest("Analyze deeply.", largeInput), opts);
 
-    var resp  = await AiStrategyFixture.Default.ExecuteAsync(
-        new FrontierRequest("sys", "user"), opts);
-
-    Assert.Null(resp.Error);
+        Assert.Null(resp.Error);
+    }
 }
 ```
 
