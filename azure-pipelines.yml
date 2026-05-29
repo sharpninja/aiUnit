@@ -18,7 +18,7 @@ variables:
   NuGetPackageOutput: $(Build.SourcesDirectory)\artifacts\nupkg
 
 pool:
-  vmImage: windows-latest
+  name: Default
 
 steps:
   - checkout: self
