@@ -116,6 +116,18 @@
 
 **Tool package CI flow** — CI must restore, test, pack, smoke-install the aiunit .NET tool package from the produced package source, and publish to nuget.org only from the intended stable version tag flow.
 
+## TR-AIUNIT-RESILIENCE-ATTR-001
+
+**Attribute resilience property shape and sentinel encoding** — Each resilience property on AiFactAttribute and AiTheoryAttribute uses a sentinel meaning inherit: int properties default to -1, string properties to null, bool? to null. GetResilienceOptions(ResilienceOptions base) merges sentinel-absent values from base and returns a fully-populated ResilienceOptions. The 8 properties are: TimeoutSeconds(int), MaxRetries(int), RetryBaseDelayMs(int), RetryBackoff(string nullable), BreakAfterConsecutiveFailures(int), BreakDurationSeconds(int), FallbackStrategy(string nullable), ResilienceEnabled(bool?).
+
+## TR-AIUNIT-RESILIENCE-PIPELINE-001
+
+**Polly pipeline order and composition** — The resilience pipeline must be built using Polly.Core 8.5.0 on IFrontierModelClient only. Add-order (outermost first): Fallback (conditional on FallbackStrategy), CircuitBreaker, Retry, Timeout. Timeout is per-attempt. Retry ShouldHandle excludes OperationCanceledException, BrokenCircuitException, IsolatedCircuitException, and non-transient error codes (auth, rate_limit, AttachmentTooLarge, spawn_failed). CircuitBreaker uses FailureRatio=1.0, MinimumThroughput=BreakAfterConsecutiveFailures, SamplingDuration=N*max(TimeoutSeconds,30)+60s. Fallback reads the original request via AsyncLocal and invokes the alternate strategy client.
+
+## TR-AIUNIT-RESILIENCE-PRECEDENCE-001
+
+**Three-layer option precedence** — ResilienceOptions.Resolve(attrOpts, strategyOpts, libraryDefault) applies precedence: attribute value beats strategy-config value beats library default. Library defaults: TimeoutSeconds=180, MaxRetries=1, RetryBaseDelayMs=2000, RetryBackoff=Exponential, BreakAfterConsecutiveFailures=5, BreakDurationSeconds=30, FallbackStrategy=null, ResilienceEnabled=true. AiStrategyFixture.StrategyResilienceOptions seeds from strategy TimeoutSeconds with all other fields at library default.
+
 ## TR-AIUNIT-REVIEW-001
 
 **Stackable review DataAttributes** — CodeReviewAttribute, PlanReviewAttribute, and ProjectReviewAttribute inherit a common AiReviewAttribute with AttributeUsage AllowMultiple=true and yield object rows containing prompt and result JSON.

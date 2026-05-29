@@ -70,6 +70,12 @@
 | TEST-AIUNIT-066 | Local validation runs Release dotnet test, dotnet pack to a temporary output, local dotnet tool install and aiunit smoke checks, git diff --check, and a temporary stable version tag pack smoke that proves full-release package versions are produced. Azure NuGet push requires NuGetApiKey and a stable version tag. |
 | TEST-AIUNIT-067 | AiUnitReplCommandLineTests.ExecuteAsync_Repl_ProcessesScriptedCommands verifies repl mode processes list, show, and exit against a temporary workspace, and ExecuteAsync_Repl_ReportsInvalidCommandAndContinues verifies invalid commands report errors while later commands still execute. |
 
+## TEST-AIUNIT-RESILIENCE
+
+| ID | Requirement |
+| --- | --- |
+| TEST-AIUNIT-RESILIENCE-001 | GIVEN a ResilientFrontierClient wrapping a StubFrontierClient WHEN the stub is configured to timeout/fail/break THEN the pipeline applies the correct resilience behavior without live model calls |
+
 ## TEST-AIUNITREPL
 
 | ID | Requirement |

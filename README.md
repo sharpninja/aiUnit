@@ -321,13 +321,13 @@ requires no configuration to get started.
 
 The pipeline applies four stages in order, outermost first:
 
-```
-caller
-  └─ Fallback (optional)       ← catches open-circuit exceptions; routes to alternate strategy
-       └─ Circuit Breaker       ← opens after N consecutive failures
-            └─ Retry            ← retries on transient errors with backoff
-                 └─ Timeout     ← cancels each attempt after TimeoutSeconds
-                      └─ IFrontierModelClient.SendAsync
+```mermaid
+flowchart TD
+    Caller --> Fallback["Fallback (optional)\ncatches open-circuit exceptions\nroutes to alternate strategy"]
+    Fallback --> CB["Circuit Breaker\nopens after N consecutive failures"]
+    CB --> Retry["Retry\nretries transient errors with backoff"]
+    Retry --> Timeout["Timeout\ncancels each attempt after TimeoutSeconds"]
+    Timeout --> Inner["IFrontierModelClient.SendAsync"]
 ```
 
 | Stage | Default behavior |
@@ -341,10 +341,12 @@ caller
 
 Resilience options are resolved at three levels, with the most specific winning:
 
-```
-[AiFact(TimeoutSeconds = 300)]     ← 3. per-test attribute (highest priority)
-appsettings.aiunit.json             ← 2. strategy TimeoutSeconds
-ResilienceOptions.LibraryDefault    ← 1. library defaults (lowest priority)
+```mermaid
+flowchart LR
+    LD["1. ResilienceOptions.LibraryDefault\nlowest priority"]
+    ST["2. appsettings.aiunit.json\nstrategy TimeoutSeconds"]
+    AT["3. AiFact / AiTheory attribute\nhighest priority"]
+    LD -->|"overridden by"| ST -->|"overridden by"| AT
 ```
 
 Only `TimeoutSeconds` flows from `appsettings.aiunit.json` into the pipeline. All

@@ -128,6 +128,19 @@ The repository must provide SVG wireframes for each aiunit TUI screen and captur
 
 The test suite must compare finished TUI screenshots to their SVG wireframes with aiUnit using RiskyStars-style YAML scenarios and strict JSON result validation.
 
+## FR-AIUNIT-RESILIENCE-001 AI-backed test calls wrapped in configurable resilience pipeline
+
+AI-backed test calls (all IFrontierModelClient.SendAsync invocations) are
+wrapped in a configurable resilience pipeline comprising per-attempt timeout,
+retry with backoff and jitter, circuit breaker, and optional fallback to an
+alternate strategy. The pipeline is enabled by default with library-defined
+defaults and is configurable per-strategy via config and per-test via
+AiFact/AiTheory attribute options.
+
+## FR-AIUNIT-RESILIENCE-002 Resilience options exposed on AiFact and AiTheory attributes
+
+AiFactAttribute and AiTheoryAttribute expose TimeoutSeconds, MaxRetries, RetryBaseDelayMs, RetryBackoff, BreakAfterConsecutiveFailures, BreakDurationSeconds, FallbackStrategy, and ResilienceEnabled properties with sentinel defaults (-1 / null / null). Attribute values override strategy-config values which override library defaults.
+
 ## FR-LOBBY-MIGRATION-001 Lobby surfaces consume Phase 1 themed component primitives and ThemedTable
 
 Lobby surfaces consume Phase 1 themed component primitives (AppFrame, Card, ThemedButton, Chip, Pill, LabelValueRow, SectionHeader, ScrollableBody) and the ThemedTable primitive, resolving every color through Tokens.* dotted-path tokens. Every multi-column Grid built by a lobby surface declares RowsProportions and sets GridRow/GridColumn on every child widget so the MyraScreens_RejectImplicitRowsForMultiColumnLayouts guard passes. Theme swap via ThemeRuntime.Apply repaints lobby cards.
