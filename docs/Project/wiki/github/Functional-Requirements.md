@@ -84,9 +84,9 @@ aiUnit exposes CodeReview, PlanReview, and ProjectReview attributes that can be 
 
 CodeReviewAttribute, PlanReviewAttribute, and ProjectReviewAttribute must use built-in YAML prompt files for their null or empty prompt fallback instead of hardcoded inline prompt text.
 
-## FR-AIUNIT-023 Azure pipeline publishes NuGet package
+## FR-AIUNIT-023 Azure pipeline publishes NuGet packages from version tags
 
-Azure Pipelines must restore, test, pack, publish package artifacts, and push the aiUnit .nupkg to nuget.org from main builds using the McpServer pipeline NUGET_API_KEY mechanism.
+Azure Pipelines must restore, test, pack, publish package artifacts, smoke-test the packed aiunit tool, and push full-release aiUnit packages to nuget.org only from stable version tag builds using the NuGetApiKey pipeline variable.
 
 ## FR-AIUNITREPL-001 Discover aiUnit-enabled projects
 
@@ -127,3 +127,8 @@ The repository must provide SVG wireframes for each aiunit TUI screen and captur
 ## FR-AIUNITREPL-010 Compare TUI screenshots with aiUnit
 
 The test suite must compare finished TUI screenshots to their SVG wireframes with aiUnit using RiskyStars-style YAML scenarios and strict JSON result validation.
+
+## FR-LOBBY-MIGRATION-001 Lobby surfaces consume Phase 1 themed component primitives and ThemedTable
+
+Lobby surfaces consume Phase 1 themed component primitives (AppFrame, Card, ThemedButton, Chip, Pill, LabelValueRow, SectionHeader, ScrollableBody) and the ThemedTable primitive, resolving every color through Tokens.* dotted-path tokens. Every multi-column Grid built by a lobby surface declares RowsProportions and sets GridRow/GridColumn on every child widget so the MyraScreens_RejectImplicitRowsForMultiColumnLayouts guard passes. Theme swap via ThemeRuntime.Apply repaints lobby cards.
+

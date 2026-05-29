@@ -1,7 +1,11 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SharpNinja.AiUnit.Frontier;
+using SharpNinja.AiUnit.Resilience;
 
 namespace SharpNinja.AiUnit.Xunit;
 
@@ -35,9 +39,11 @@ public sealed class AiStrategyFixture : IDisposable
 		() => new AiStrategyFixture(snapshotEnv: false),
 		isThreadSafe: true);
 
+	private readonly IFrontierModelClient? _rawClient;
 	private readonly IFrontierModelClient? _client;
 	private readonly object? _resolved;
 	private readonly string _skipReason;
+	private readonly ResilienceOptions _strategyResilienceOpts;
 	private bool _disposed;
 
 	/// <summary>
@@ -59,16 +65,36 @@ public sealed class AiStrategyFixture : IDisposable
 		_ = snapshotEnv;
 		try
 		{
-			var (client, resolved, skip) = TryResolveViaReflection();
-			_client = client;
+			var (raw, resolved, skip) = TryResolveViaReflection();
+			_rawClient = raw;
 			_resolved = resolved;
 			_skipReason = skip ?? string.Empty;
+
+			if (raw is not null)
+			{
+				var timeoutSecs = ExtractStrategyTimeoutSeconds(resolved);
+				_strategyResilienceOpts = ResilienceOptions.LibraryDefault with
+				{
+					TimeoutSeconds = timeoutSecs
+				};
+				_client = new ResilientFrontierClient(
+					raw,
+					_strategyResilienceOpts,
+					NullLogger<ResilientFrontierClient>.Instance);
+			}
+			else
+			{
+				_strategyResilienceOpts = ResilienceOptions.LibraryDefault;
+				_client = null;
+			}
 		}
 		catch (Exception ex)
 		{
+			_rawClient = null;
 			_client = null;
 			_resolved = null;
 			_skipReason = "AiStrategyFixture construction failed: " + ex.Message;
+			_strategyResilienceOpts = ResilienceOptions.LibraryDefault;
 		}
 	}
 
@@ -98,9 +124,42 @@ public sealed class AiStrategyFixture : IDisposable
 	public bool IsResolved => _client is not null;
 
 	/// <summary>
-	/// Disposes the underlying client if it implements
-	/// <see cref="IDisposable"/> (HTTP adapters typically own an
-	/// <see cref="System.Net.Http.HttpClient"/>).
+	/// Resilience options seeded from the active strategy's configured
+	/// <c>TimeoutSeconds</c>; all other fields use library defaults.
+	/// Test attributes merge their per-test sentinel overrides over this base.
+	/// </summary>
+	public ResilienceOptions StrategyResilienceOptions => _strategyResilienceOpts;
+
+	/// <summary>
+	/// Submits <paramref name="request"/> through the resilience pipeline,
+	/// optionally overriding options from a test attribute. When
+	/// <paramref name="overrideOpts"/> is null the strategy-level pipeline is
+	/// used directly; otherwise a per-call pipeline is constructed for that
+	/// single invocation. Throws <see cref="InvalidOperationException"/> when
+	/// <see cref="IsResolved"/> is false.
+	/// </summary>
+	public Task<FrontierResponse> ExecuteAsync(
+		FrontierRequest request,
+		ResilienceOptions? overrideOpts = null,
+		CancellationToken cancellationToken = default)
+	{
+		if (_rawClient is null)
+			throw new InvalidOperationException(
+				"No strategy resolved. Check IsResolved before calling ExecuteAsync.");
+
+		if (overrideOpts is null || overrideOpts == _strategyResilienceOpts)
+			return _client!.SendAsync(request, cancellationToken);
+
+		var oneOff = new ResilientFrontierClient(
+			_rawClient,
+			overrideOpts,
+			NullLogger<ResilientFrontierClient>.Instance);
+		return oneOff.SendAsync(request, cancellationToken);
+	}
+
+	/// <summary>
+	/// Disposes the resilient client wrapper (which in turn disposes the raw
+	/// client if it implements <see cref="IDisposable"/>).
 	/// </summary>
 	public void Dispose()
 	{
@@ -232,6 +291,14 @@ public sealed class AiStrategyFixture : IDisposable
 			skip = "AiUnitStrategyResolver.Build returned null client without a skip reason.";
 		}
 		return (client, resolved, skip);
+	}
+
+	private static int ExtractStrategyTimeoutSeconds(object? resolved)
+	{
+		if (resolved is null) return ResilienceOptions.LibraryDefault.TimeoutSeconds;
+		var prop = resolved.GetType().GetProperty("TimeoutSeconds");
+		if (prop is null) return ResilienceOptions.LibraryDefault.TimeoutSeconds;
+		return prop.GetValue(resolved) is int i ? i : ResilienceOptions.LibraryDefault.TimeoutSeconds;
 	}
 
 	private static Type? FindType(string fullName)

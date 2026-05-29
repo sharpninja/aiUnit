@@ -36,6 +36,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | FR-AIUNITREPL-008 | Tracked | Functional-Requirements.md |
 | FR-AIUNITREPL-009 | Tracked | Functional-Requirements.md |
 | FR-AIUNITREPL-010 | Tracked | Functional-Requirements.md |
+| FR-LOBBY-MIGRATION-001 | Tracked | Functional-Requirements.md |
 | TR-AIUNIT-ARCH-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CI-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CLI-001 | Tracked | Technical-Requirements.md |
@@ -77,6 +78,9 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TR-AIUNIT-XUNIT-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-XUNIT-002 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-XUNIT-003 | Tracked | Technical-Requirements.md |
+| TR-LOBBY-PRIMITIVES-001 | Tracked | Technical-Requirements.md |
+| TR-LOBBY-REACTIVITY-001 | Tracked | Technical-Requirements.md |
+| TR-LOBBY-TABLE-001 | Tracked | Technical-Requirements.md |
 | TEST-AIUNIT-001 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-002 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-004 | Tracked | Testing-Requirements.md |
@@ -141,3 +145,6 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TEST-AIUNIT-064 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-065 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-066 | Tracked | Testing-Requirements.md |
+| TEST-AIUNIT-067 | Tracked | Testing-Requirements.md |
+| TEST-AIUNITREPL-001 | Tracked | Testing-Requirements.md |
+| TEST-LOBBY-001 | Tracked | Testing-Requirements.md |

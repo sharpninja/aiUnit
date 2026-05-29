@@ -6,7 +6,7 @@
 
 ## TR-AIUNIT-CI-001
 
-**Azure Pipelines NuGet publish workflow** — azure-pipelines.yml packs aiUnit to artifacts/nupkg and pushes nupkg files to nuget.org from main builds using NUGET_API_KEY from the NuGetApiKey pipeline variable.
+**Azure Pipelines tagged NuGet publish workflow** — azure-pipelines.yml packs aiUnit to artifacts/nupkg, smoke-installs SharpNinja.aiUnit.Tool from the packed output, triggers on stable version tags, verifies package versions match the tag, rejects prerelease packages for full release publish, and pushes nupkg files to nuget.org with NuGetApiKey.
 
 ## TR-AIUNIT-CLI-001
 
@@ -114,7 +114,7 @@
 
 ## TR-AIUNIT-REPL-010
 
-**Tool package CI flow** — CI must restore, test, pack, and publish the aiunit .NET tool package only from the intended branch and version flow.
+**Tool package CI flow** — CI must restore, test, pack, smoke-install the aiunit .NET tool package from the produced package source, and publish to nuget.org only from the intended stable version tag flow.
 
 ## TR-AIUNIT-REVIEW-001
 
@@ -163,3 +163,16 @@
 ## TR-AIUNIT-XUNIT-003
 
 **AiTestCollection disables parallelization** — [CollectionDefinition(DisableParallelization=true)] enforces serial AI test execution to avoid rate-limit collisions. Assembly-level fallback in test project via [assembly: CollectionBehavior(DisableTestParallelization=true)].
+
+## TR-LOBBY-PRIMITIVES-001
+
+**Lobby surfaces compose from Phase 1 themed component primitives** — area=LOBBY subarea=PRIMITIVES. Every lobby surface uses AppFrame.Build for the outer page frame, Card.Standard or Card.Elevated for body cards (content added via Card.Body), ThemedButton.Build (Primary/Secondary/Destructive/Disabled/Ghost roles) for action buttons, Chip.Build for status indicators, Pill.Build (Default/Success/Warning/Danger/Active) for inline status labels, SectionHeader.Build for eyebrow captions, and ScrollableBody.Build for bounded scroll viewports. The legacy ThemedUIFactory remains in use only for Myra-specific seams (ComboBox, ValidatedTextBox) where existing UI tests scrape the widget type.
+
+## TR-LOBBY-REACTIVITY-001
+
+**Lobby surfaces repaint on theme runtime swap** — area=LOBBY subarea=REACTIVITY. Every lobby surface subscribes to IThemeRuntime.ThemeChanged via UiComponents.Subscribe so the outer surface background, header label colors, and every Phase 1 primitive emitted by the surface (Card, Chip, Pill, ThemedButton, ThemedTable rows) repaint when ThemeRuntime.Apply swaps the active document. Subscriptions are stored so re-builds dispose the previous handler before re-subscribing.
+
+## TR-LOBBY-TABLE-001
+
+**Lobby tables consume the ThemedTable primitive contract** — area=LOBBY subarea=TABLE. ThemedTable.Build emits a header band whose Tag carries a HeaderSnapshot (FgToken=palette.text.secondary, DividerToken=palette.borders.subtle), a body Grid of row Panels whose Tag carries a RowSnapshot (FillToken alternating palette.surfaces.surface and palette.surfaces.elevated; states.selected.fillToken when selected), and an accent strip per row whose Tag carries a SelectedStripSnapshot (Token=palette.accent.gold, WidthPx=2 when selected). Wraps in a ScrollableBody so always-visible scrollbar contract carries forward.
+
