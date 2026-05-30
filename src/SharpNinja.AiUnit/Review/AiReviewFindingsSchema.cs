@@ -62,6 +62,16 @@ public static class AiReviewFindingsSchema
 	          "result": { "type": "object" }
 	        }
 	      }
+	    },
+	    "runLog": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "required": ["path"],
+	      "properties": {
+	        "path": { "type": "string" },
+	        "url": { "type": "string" },
+	        "startedUtc": { "type": "string" }
+	      }
 	    }
 	  }
 	}

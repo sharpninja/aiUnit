@@ -61,11 +61,11 @@ public abstract class AiReviewAttribute : DataAttribute
 		yield return GetData(new DefaultAiReviewClientResolver());
 	}
 
-	internal object[] GetData(IAiReviewClientResolver resolver)
+	internal object[] GetData(IAiReviewClientResolver resolver, IAiReviewRunLogSink? sink = null)
 	{
 		var request = CreateExecutionRequest();
 		var resultJson = AiReviewExecutor
-			.ExecuteAsync(request, resolver)
+			.ExecuteAsync(request, resolver, sink)
 			.GetAwaiter()
 			.GetResult();
 		return [request.Prompt, resultJson];

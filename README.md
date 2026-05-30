@@ -702,7 +702,12 @@ The `resultJson` parameter always conforms to `aiunit.review.findings.v1`:
       "confidence": 0.92,
       "agent": "codex-subscription"
     }
-  ]
+  ],
+  "runLog": {
+    "path": "C:\\repo\\aiunit-results\\aiunit-review-code-20260530T120000.000Z.json",
+    "url": "https://logs.example/runs/aiunit-review-code-20260530T120000.000Z.json",
+    "startedUtc": "2026-05-30T12:00:00.0000000+00:00"
+  }
 }
 ```
 
@@ -711,6 +716,41 @@ The `resultJson` parameter always conforms to `aiunit.review.findings.v1`:
 | `status` | `pass` / `fail` / `error` | `pass` = no blocking findings; `fail` = issues found; `error` = review could not complete |
 | `severity` | `critical` / `high` / `medium` / `low` / `info` | Finding severity |
 | `category` | `correctness` / `security` / `performance` / `style` / `design` | Finding category |
+| `runLog.path` | local file path | Path to the persisted run log for this review run (always present) |
+| `runLog.url` | URL | Online link to the run log (present only when an online base URL is configured) |
+
+### Run logs and the results directory
+
+Every review writes a run-log result file and embeds a `runLog` reference (above)
+into its `resultJson`. Each file is named
+`aiunit-review-{type}-{yyyyMMddTHHmmss.fffZ}.json` using the UTC start time of the
+test, so files sort chronologically. The run log captures the review type, the
+effective prompt, the resolving agent(s), provider/model, latency, token usage,
+any error, and the full findings document.
+
+Configure where results are written via the optional `Results` block in
+`appsettings.aiunit.json`:
+
+```json
+{
+  "AiUnit": {
+    "ActiveStrategy": "codex-subscription",
+    "Results": {
+      "OutputDirectory": "aiunit-results",
+      "OnlineBaseUrl": "https://logs.example/runs"
+    },
+    "Strategies": { "...": {} }
+  }
+}
+```
+
+| Setting | Default | Override env var |
+|---------|---------|------------------|
+| `Results.OutputDirectory` | `aiunit-results` under the test output directory | `AIUNIT_RESULTS_DIR` |
+| `Results.OnlineBaseUrl` | none (no `url` emitted) | `AIUNIT_RESULTS_BASE_URL` |
+
+When `OnlineBaseUrl` is set, `runLog.url` is the base URL joined with the run-log
+file name.
 
 ---
 

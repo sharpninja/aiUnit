@@ -139,9 +139,10 @@ public sealed class AiReviewAttributeTests
 	public void Attribute_CreatesTwoParameterDataRow()
 	{
 		var resolver = new FakeResolver();
+		var sink = new RecordingRunLogSink(@"C:\runs\unit.json", null);
 		var attr = new AiCodeReviewAttribute("Review this method.");
 
-		var row = attr.GetData(resolver);
+		var row = attr.GetData(resolver, sink);
 
 		Assert.Equal(2, row.Length);
 		Assert.Equal("Review this method.", row[0]);
@@ -171,7 +172,8 @@ public sealed class AiReviewAttributeTests
 			"Review the diff.",
 			new[] { new AiReviewAgentSpec(Name: "agent-a"), new AiReviewAgentSpec(Name: "agent-b") });
 
-		var result = await AiReviewExecutor.ExecuteAsync(request, resolver);
+		var sink = new RecordingRunLogSink(@"C:\runs\multi.json", null);
+		var result = await AiReviewExecutor.ExecuteAsync(request, resolver, sink);
 
 		using var doc = JsonDocument.Parse(result);
 		Assert.Equal("aggregated", doc.RootElement.GetProperty("summary").GetString());

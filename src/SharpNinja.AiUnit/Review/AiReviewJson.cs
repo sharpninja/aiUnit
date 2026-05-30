@@ -57,6 +57,55 @@ internal static class AiReviewJson
 		return Encoding.UTF8.GetString(stream.ToArray());
 	}
 
+	/// <summary>
+	/// Returns <paramref name="reviewJson"/> with a <c>runLog</c> property added
+	/// (replacing any existing one), preserving all other properties. The
+	/// property carries the local run-log path, optional online URL, and the
+	/// UTC start time. When the root is not a JSON object the input is returned
+	/// unchanged.
+	/// </summary>
+	public static string InjectRunLog(string reviewJson, AiReviewRunLogRef runLog)
+	{
+		try
+		{
+			using var doc = JsonDocument.Parse(reviewJson);
+			if (doc.RootElement.ValueKind != JsonValueKind.Object)
+			{
+				return reviewJson;
+			}
+
+			using var stream = new MemoryStream();
+			using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+			{
+				writer.WriteStartObject();
+				foreach (var property in doc.RootElement.EnumerateObject())
+				{
+					if (property.NameEquals("runLog"))
+					{
+						continue;
+					}
+					property.WriteTo(writer);
+				}
+
+				writer.WriteStartObject("runLog");
+				writer.WriteString("path", runLog.Path);
+				if (!string.IsNullOrWhiteSpace(runLog.Url))
+				{
+					writer.WriteString("url", runLog.Url);
+				}
+				writer.WriteString("startedUtc", runLog.StartedUtc.ToUniversalTime().ToString("o"));
+				writer.WriteEndObject();
+
+				writer.WriteEndObject();
+			}
+			return Encoding.UTF8.GetString(stream.ToArray());
+		}
+		catch (JsonException)
+		{
+			return reviewJson;
+		}
+	}
+
 	public static string BuildAgentReviewsJson(IReadOnlyList<AiReviewAgentResult> reviews)
 	{
 		using var stream = new MemoryStream();

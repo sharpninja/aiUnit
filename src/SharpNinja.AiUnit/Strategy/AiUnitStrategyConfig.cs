@@ -18,9 +18,11 @@ namespace SharpNinja.AiUnit.Strategy;
 /// </summary>
 /// <param name="ActiveStrategy">Name of the default strategy to use.</param>
 /// <param name="Strategies">Named map of every configured strategy.</param>
+/// <param name="Results">Optional results-output configuration (run-log directory + online base URL).</param>
 public sealed record AiUnitStrategyConfig(
 	[property: JsonPropertyName("ActiveStrategy")] string ActiveStrategy,
-	[property: JsonPropertyName("Strategies")] IReadOnlyDictionary<string, AiUnitStrategySettings> Strategies);
+	[property: JsonPropertyName("Strategies")] IReadOnlyDictionary<string, AiUnitStrategySettings> Strategies,
+	[property: JsonPropertyName("Results")] AiUnitResultsOptions? Results = null);
 
 /// <summary>
 /// Per-strategy settings deserialized from the JSON config file. All fields

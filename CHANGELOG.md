@@ -9,6 +9,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Review run logs**: every review now persists a run-log result file (review
+  type, effective prompt, resolving agent(s), provider/model, latency, token
+  usage, error, and the full findings document) and embeds a `runLog` reference
+  into the review `resultJson` on every output path (single-agent pass-through,
+  wrapped error, and multi-agent aggregate). `runLog.path` is the local file
+  path (always present); `runLog.url` is an online link when an online base URL
+  is configured. (FR-AIUNIT-024)
+- **Configurable results directory**: optional `AiUnit.Results` section in
+  `appsettings.aiunit.json` with `OutputDirectory` and `OnlineBaseUrl`. Run-log
+  files are named `aiunit-review-{type}-{yyyyMMddTHHmmss.fffZ}.json` using the
+  sortable UTC start time of the test. Defaults to an `aiunit-results` folder
+  under the test output directory. Env overrides: `AIUNIT_RESULTS_DIR`,
+  `AIUNIT_RESULTS_BASE_URL`. (FR-AIUNIT-025)
+- `AiUnitResultsOptions`, `AiUnitResultsLocator`, and `AiReviewRunLogRef` public
+  types; optional `runLog` property added to the `aiunit.review.findings.v1`
+  schema.
+
 ---
 
 ## [0.10.0] - 2026-05-29
