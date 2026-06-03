@@ -88,6 +88,70 @@ AiCodeReviewAttribute, AiPlanReviewAttribute, and AiProjectReviewAttribute must 
 
 Azure Pipelines must restore, test, pack, publish package artifacts, smoke-test the packed aiunit tool, and push full-release aiUnit packages to nuget.org only from stable version tag builds using the NuGetApiKey pipeline variable.
 
+## FR-AIUNIT-024 Review JSON includes run-log reference
+
+Every aiUnit review result JSON (AiCodeReview/AiPlanReview/AiProjectReview) must include a runLog object referencing the persisted run log for that review run. The reference must contain the local filesystem path to the run-log file and, when an online base URL is configured, a url to the run log. The reference is present on all output paths: valid agent JSON pass-through, wrapped-error output, and multi-agent aggregate output.
+
+## FR-AIUNIT-025 Configurable results output directory with sortable run-log filenames
+
+aiUnit must support an optional appsettings configuration value (AiUnit.Results.OutputDirectory) specifying the directory where review run-log result files are written. Each result file name must include a sortable UTC datetime of the start of the test. When unset, a default directory (aiunit-results under the test output base directory) is used. An optional AiUnit.Results.OnlineBaseUrl supplies the base for the online run-log URL.
+
+## FR-AIUNITDESKTOP-001 Scenarios load from configurable folders
+
+Desktop app loads wireframe scenarios from three user-configurable folder paths (scenarios YAML, wireframe SVG, actual screenshot PNG) instead of marker-walking the repo. Loader resolves YAML-relative paths against the configured wireframes and screenshots folders, accepts absolute paths verbatim, and surfaces a per-scenario error placeholder when a referenced image is missing.
+
+## FR-AIUNITDESKTOP-002 First-run folder pickers and persisted settings
+
+On first launch the Settings flyout opens automatically and asks the user to pick three folders (scenarios YAML, wireframe SVG, actual screenshot PNG). Folder pickers use Avalonia StorageProvider OpenFolderPickerAsync. Settings persist to a JSON file under user-profile AppData. Subsequent launches skip the flyout and load directly. A reload-scenarios action re-runs the loader.
+
+## FR-AIUNITDESKTOP-003 Agent selection from strategy config with built-in grok fallback
+
+A toolbar ComboBox lets the user pick the agent CLI to host in the embedded terminal. Items are populated from AiUnitStrategyLoader TryLoad filtered to Kind cli (claude-code, codex). Grok is provided as a built-in fallback even when no matching strategy exists in appsettings aiunit json. Selecting an agent disposes any running subprocess gracefully (2 second SIGTERM grace) and launches the new one.
+
+## FR-AIUNITDESKTOP-004 Embedded native terminal hosts agent CLIs
+
+Middle column of the main window hosts a native Avalonia terminal (Iciclecreek Terminal TerminalControl) that runs the selected agent CLI under a real PTY (ConPTY on Windows, forkpty on Unix). The terminal renders VT100 ANSI sequences (colors, cursor movement, alternate buffer) and supports keyboard input. Required because claude and codex switch to non-interactive mode when stdin is not a TTY.
+
+## FR-AIUNITDESKTOP-005 Three-column layout with top scenario nav
+
+Main window shows a top nav bar listing scenarios in numeric-prefix order with the active item highlighted, three resizable body columns (wireframe SVG left, embedded terminal middle, actual screenshot PNG right), and a bottom status bar with screen id, agent name, process status, and PID. Clicking a scenario in the nav refreshes both image panels.
+
+## FR-AIUNITDESKTOP-006 Paste scenario YAML to agent stdin
+
+A toolbar button (Segoe MDL2 Send glyph) writes the current scenario ModelPayloadYaml (raw YAML plus redacted AGENTS-README content) followed by newline to the terminal stdin. This primes the agent with the scenario context for human-in-the-loop review.
+
+## FR-AIUNITDESKTOP-007 Undockable chat terminal window
+
+A toolbar toggle moves the embedded terminal out of the main window into a separate UndockedChatWindow. The same ChatTerminalViewModel instance is the DataContext in both locations so the PTY stream and transcript continue uninterrupted across dock and undock cycles. Closing the undocked window redocks the terminal back into the middle column.
+
+## FR-AIUNITDESKTOP-008 Undocked window position remembered per monitor
+
+AppSettings persists the undocked window bounds (X, Y, width, height, screen display name). On re-undock the window is restored to its prior monitor and position. If the prior monitor is no longer attached, the window centers on the primary screen and bounds are sanity-clamped to remain on-screen.
+
+## FR-AIUNITDESKTOP-009 Per-scenario human review verdict persisted as sidecar
+
+A VerdictPanel allows the reviewer to record approved, rejected, or needs-changes plus free-text notes per scenario. Verdicts are written to a sidecar file named screenId review yaml next to the scenario YAML. The loader merges any sidecar into the in-memory WireframeScenario. Save writes the file. Clear deletes it. Status bar shows the current verdict.
+
+## FR-AIUNITDESKTOP-010 Agent result JSON detected and saved to artifacts
+
+The chat view watches the transcript for a JSON object matching the scenario resultSchema (fenced json block or trailing balanced-brace object). When detected, a non-modal toast offers Save, Save and Score, or Dismiss. Save writes the JSON to artifacts aiunit-desktop-reviews under the aiUnit repo root when cwd is inside it, otherwise under user-profile AppData fallback.
+
+## FR-AIUNITDESKTOP-011 Saved JSON scored against scenario resultSchema
+
+Save and Score additionally validates the captured JSON against the scenario embedded resultSchema using JsonSchema Net and writes a sibling score json file summarizing pass and fail per schema rule and an overall verdict.
+
+## FR-AIUNITDESKTOP-012 Macro replay across all scenarios with summary
+
+A Run-all toolbar button iterates scenarios in numeric-prefix order: selects each, pastes ModelPayloadYaml, waits for the agent to emit JSON (poll 250 ms with configurable per-scenario timeout, default 5 minutes), saves and scores the result under artifacts aiunit-desktop-reviews per-run folder. A MacroRunSummaryWindow shows total scenarios scored and passed at end and offers Open Folder. Cancellable mid-run.
+
+## FR-AIUNITDESKTOP-013 Cross-platform icon kit Segoe MDL2 on Windows SVG on others
+
+An IconKit maps logical icon names (Send, Settings, Play, FolderOpen, NewWindow, BackToWindow, Refresh, Stop, ChevronLeft, ChevronRight) to the appropriate visual: Segoe MDL2 Assets codepoint on Windows or a Projektanker Icons Avalonia SVG identifier on Linux and macOS. Detection at startup binds the right resource template so XAML stays platform-neutral.
+
+## FR-AIUNITDESKTOP-014 Distribution as dotnet tool aiunit-review with probe-exit smoke
+
+The Desktop app ships as a packable dotnet tool. csproj has PackAsTool true, ToolCommandName aiunit-review, PackageId SharpNinja aiUnit Desktop Tool. Users install with dotnet tool install global and run aiunit-review. The app honors a probe-exit flag that returns 0 immediately without opening a window so CI can smoke-test the package on headless agents.
+
 ## FR-AIUNITREPL-001 Discover aiUnit-enabled projects
 
 The aiunit tool must recursively discover aiUnit-enabled projects from the current directory or a supplied root.

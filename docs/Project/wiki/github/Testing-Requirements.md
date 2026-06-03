@@ -69,12 +69,32 @@
 | TEST-AIUNIT-065 | AiReviewAttributeTests verifies every built-in default prompt contains the concrete AiReviewFindingsSchema.JsonSchema reply contract and does not expose an unresolved reviewFindingsJsonSchema token. |
 | TEST-AIUNIT-066 | Local validation runs Release dotnet test, dotnet pack to a temporary output, local dotnet tool install and aiunit smoke checks, git diff --check, and a temporary stable version tag pack smoke that proves full-release package versions are produced. Azure NuGet push requires NuGetApiKey and a stable version tag. |
 | TEST-AIUNIT-067 | AiUnitReplCommandLineTests.ExecuteAsync_Repl_ProcessesScriptedCommands verifies repl mode processes list, show, and exit against a temporary workspace, and ExecuteAsync_Repl_ReportsInvalidCommandAndContinues verifies invalid commands report errors while later commands still execute. |
+| TEST-AIUNIT-068 | Unit tests: AiReviewJson.InjectRunLog adds runLog to a valid review object and preserves existing properties; executor injects runLog on pass-through, wrapped-error, and multi-agent aggregate paths using a fake in-memory sink; AiUnitResultsLocator resolves directory/url precedence (env > config > default) and builds sortable filenames; findings schema contains optional runLog. Integration tests: FileAiReviewRunLogSink writes a valid JSON run-log file to a temp directory with a sortable name, executor end-to-end produces review JSON whose runLog.path exists on disk and contains the run, and AiUnitStrategyLoader.TryLoad parses an appsettings file containing AiUnit.Results. |
 
 ## TEST-AIUNIT-RESILIENCE
 
 | ID | Requirement |
 | --- | --- |
 | TEST-AIUNIT-RESILIENCE-001 | GIVEN a ResilientFrontierClient wrapping a StubFrontierClient WHEN the stub is configured to timeout/fail/break THEN the pipeline applies the correct resilience behavior without live model calls |
+
+## TEST-AIUNITDESKTOP
+
+| ID | Requirement |
+| --- | --- |
+| TEST-AIUNITDESKTOP-001 | Cover loading 4 scenarios from a configured folder set, relative-path resolution against wireframes and screenshots folders, absolute-path passthrough, missing-file placeholder behavior, and sidecar verdict merge. Uses an in-memory file system fake for mocks-first phase before real I O. |
+| TEST-AIUNITDESKTOP-002 | Cover load and save JSON round-trip including UndockedWindowBounds, missing-file yields default settings, malformed-file recovery. Settings file path resolves correctly per platform. |
+| TEST-AIUNITDESKTOP-003 | Cover claude and codex resolution from a synthetic strategy config, grok built-in fallback when no matching strategy, ordering of returned AgentCommand list. |
+| TEST-AIUNITDESKTOP-004 | Cover Launch, Kill, WriteInput, ProcessExited contract on the ITerminal abstraction with a fake terminal. Includes graceful kill on agent change (2 second SIGTERM grace) and process restart. |
+| TEST-AIUNITDESKTOP-005 | Cover scenario ordering by numeric prefix, selection raising PropertyChanged, active-item highlight flag, and re-load after settings change. |
+| TEST-AIUNITDESKTOP-006 | Cover PasteScenarioCommand calls ITerminal WriteInput exactly once with the active scenarios ModelPayloadYaml plus newline. CanExecute is false when no agent is running or no scenario selected. |
+| TEST-AIUNITDESKTOP-007 | Cover dock toggle command IsDocked round-trip, UndockedWindowBounds round-trip in AppSettings, on-screen clamp when prior monitor is missing, and DataContext sharing across dock and undock. |
+| TEST-AIUNITDESKTOP-008 | Cover sidecar write and read round-trip for approved, rejected, and needs-changes verdicts with notes. Clear deletes the file. Loader merges sidecar into scenario HumanReview. |
+| TEST-AIUNITDESKTOP-009 | Cover regex-detect a fenced json block in a synthetic transcript, balanced-brace trailing object fallback, ignore non-JSON content, write file under artifacts aiunit-desktop-reviews with correct UTC formatting. |
+| TEST-AIUNITDESKTOP-010 | Cover known-good JSON passes resultSchema validation, known-bad JSON yields per-rule violations, score json side-output structure. |
+| TEST-AIUNITDESKTOP-011 | Cover ordered iteration across 4 scenarios using a fake ITerminal and fake IResultCapture, per-scenario timeout enforcement, cancellation behavior (current scenario finishes then exits), summary json roll-up structure. |
+| TEST-AIUNITDESKTOP-012 | Cover Windows OS path returns Segoe MDL2 codepoint mapping for all logical icon names, non-Windows OS path returns Projektanker SVG identifier mapping, no missing-name entries. |
+| TEST-AIUNITDESKTOP-013 | Cover Program Main returning 0 immediately when probe-exit flag is in args, without instantiating MainWindow. Verifies the headless CI smoke contract. |
+| TEST-AIUNITDESKTOP-014 | Manual end-to-end validation: full macro replay across all 4 scenarios with a real agent (claude or codex or grok), verdict persistence across relaunch, undock and redock on a second monitor. Documented in test plan, not auto-executed. |
 
 ## TEST-AIUNITREPL
 

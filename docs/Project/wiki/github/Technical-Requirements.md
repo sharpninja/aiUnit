@@ -36,9 +36,73 @@
 
 **Bundled sample appsettings** — samples/appsettings.aiunit.json must include current examples for Codex subscription CLI, Claude Code CLI Opus, Copilot CLI Gemini, xAI Grok through the OpenAI-compatible endpoint, and HTTP fallback strategies.
 
+## TR-AIUNIT-CONFIG-005
+
+**Bind AiUnit.Results options with env overrides and default directory** — AiUnitResultsOptions(OutputDirectory, OnlineBaseUrl) binds from the AiUnit.Results section of appsettings.aiunit.json (added to AiUnitStrategyConfig as optional Results). A locator resolves the effective output directory: AIUNIT_RESULTS_DIR env override, then configured OutputDirectory, then default aiunit-results under AppContext.BaseDirectory; and the online base URL: AIUNIT_RESULTS_BASE_URL env override, then configured OnlineBaseUrl.
+
+## TR-AIUNIT-CONFIG-006
+
+**Sortable run-log filename format** — Run-log result filenames are aiunit-review-{reviewType}-{yyyyMMddTHHmmss.fffZ}.json using the UTC test-start time, sortable lexicographically by start time. The file sink ensures the target directory exists and resolves collisions deterministically by appending an incrementing suffix.
+
 ## TR-AIUNIT-CORE-001
 
 **TargetFramework=net10.0** — csproj declares <TargetFramework>net10.0</TargetFramework>.
+
+## TR-AIUNITDESKTOP-AGENT-001
+
+**AgentCommandResolver reuses AiUnitStrategyLoader** — AgentCommandResolver calls AiUnitStrategyLoader TryLoad on startup, filters config Strategies to Kind cli, and returns a list of AgentCommand records (Name, Command, Args, WorkingDir, Env). Grok is appended as a built-in entry when no matching strategy exists.
+
+## TR-AIUNITDESKTOP-AGENT-002
+
+**Paste-YAML command in ChatTerminalViewModel** — ChatTerminalViewModel PasteScenarioCommand reads the active scenarios ModelPayloadYaml from the bound ScenarioViewModel and calls ITerminal WriteInput with the model payload plus newline. Disabled when no agent is running or no scenario selected.
+
+## TR-AIUNITDESKTOP-CAPTURE-001
+
+**ResultCaptureService detects and saves transcript JSON** — ResultCaptureService TryDetect (transcript slice) returns found and json using regex on fenced json blocks plus a balanced-brace trailing-object fallback. SaveAsync (json, artifactsRoot, screenId, utc) writes screenId json under artifacts aiunit-desktop-reviews. Artifacts root resolved to aiUnit repo root when cwd is inside it else AppData fallback.
+
+## TR-AIUNITDESKTOP-ICON-001
+
+**IconKit Windows vs cross-platform mapping** — IconKit static maps logical name to a pair of segoeCodepoint and projektankerId. At startup OperatingSystem IsWindows binds the global IconStyle resource: a TextBlock template using FontFamily Segoe MDL2 Assets on Windows or an Icon template using Projektanker Icons Avalonia on others. XAML buttons reference Static Resource icon name.
+
+## TR-AIUNITDESKTOP-LOADER-001
+
+**WireframeScenario record and folder-driven loader** — Public records SharpNinja AiUnit Scenarios WireframeScenario and WireframeRequirement added to the core library. Desktop project provides WireframeScenarioLoader LoadAsync taking three folder paths returning a list of WireframeScenario. Relative paths in YAML resolved against the configured folders. Absolute paths used verbatim. Missing image files yield an error placeholder per scenario not an exception.
+
+## TR-AIUNITDESKTOP-MACRO-001
+
+**MacroRunner orchestrates run-all with cancellation** — MacroRunner RunAsync (scenarios, ITerminal, IResultCapture, IResultScoring, CancellationToken) iterates scenarios in order. Paste ModelPayloadYaml, poll 250 ms for captured JSON up to per-scenario timeout (default 5 minutes, settings-configurable), save and score, advance. Emits per-scenario progress events. On cancel lets current scenario finish then exits. Writes summary json roll-up.
+
+## TR-AIUNITDESKTOP-PACKAGE-001
+
+**Dotnet tool packaging with probe-exit smoke** — csproj sets OutputType Exe, PackAsTool true, ToolCommandName aiunit-review, PackageId SharpNinja aiUnit Desktop Tool, GenerateDocumentationFile true, Title, Description, PackageTags. Program Main returns 0 immediately when args contain probe-exit without instantiating MainWindow. Azure pipeline Smoke test step extended to install the tool and run probe-exit.
+
+## TR-AIUNITDESKTOP-SCORE-001
+
+**ResultScoringService validates JSON against resultSchema** — ResultScoringService ScoreAsync (capturedJson, resultSchemaJson) returns ScoreResult with passed flag and list of SchemaViolation. Uses JsonSchema Net for validation. Writes sibling score json with per-rule pass and fail summary and overall verdict.
+
+## TR-AIUNITDESKTOP-SETTINGS-001
+
+**AppSettings JSON persistence and SettingsFlyout pickers** — AppSettings is a record holding ScenariosFolder, WireframesFolder, ScreenshotsFolder, LastAgent, UndockedWindowBounds. SettingsService loads and saves a JSON file at user-profile AppData with platform-neutral fallback. SettingsFlyout XAML has three folder-picker rows backed by TopLevel GetTopLevel StorageProvider OpenFolderPickerAsync.
+
+## TR-AIUNITDESKTOP-SETTINGS-002
+
+**UndockedWindowBounds persistence with multi-monitor restore** — AppSettings UndockedWindowBounds with X, Y, Width, Height, ScreenName captured on UndockedChatWindow Closing via Screens ScreenFromVisual. On re-undock restored when screen still present in MainWindow Screens All. Otherwise centered on primary screen. Bounds sanity-clamped to keep window on-screen.
+
+## TR-AIUNITDESKTOP-TERMINAL-001
+
+**ITerminal abstraction over Iciclecreek terminal control** — ITerminal interface exposes Launch (workdir, exe, args), Kill, WriteInput (string), event ProcessExited (exitCode), Pid, IsRunning. Real adapter wraps Iciclecreek Terminal TerminalControl (LaunchProcess, Kill, Pid, ProcessExited). Paste-input API confirmed by pre-phase-4 spike against the loaded assembly with fallbacks documented in plan.
+
+## TR-AIUNITDESKTOP-UI-001
+
+**MainWindow 3-column grid and scenario nav** — MainWindow axaml uses a Grid with RowDefinitions Auto-star-Auto and ColumnDefinitions star-Auto-2star-Auto-star with GridSplitters. Top nav ItemsControl binds ScenarioListViewModel Scenarios sorted by NumericPrefix with active scenario tagged Classes active. Wireframe panel renders SVG via Avalonia Svg Skia Svg. Screenshot panel uses Image with Stretch Uniform.
+
+## TR-AIUNITDESKTOP-UNDOCK-001
+
+**UndockedChatWindow shares VM with main window** — ChatTerminalViewModel IsDocked observable property controls the swap. MainWindow column 2 width is bound to IsDocked via BoolToGridLengthConverter (0 when undocked, 2 star when docked) and splitters hidden. UndockedChatWindow DataContext is the same ChatTerminalViewModel instance so the live PTY stream is uninterrupted. Closing event sets IsDocked true.
+
+## TR-AIUNITDESKTOP-VERDICT-001
+
+**VerdictStore sidecar YAML and loader merge** — VerdictStore Read (scenariosFolder, screenId), Write (scenariosFolder, screenId, verdict), Clear (scenariosFolder, screenId). Verdict shape includes verdict (approved or rejected or needs-changes), reviewer, reviewedAt UTC, notes. WireframeScenarioLoader merges any sibling screenId review yaml into scenario HumanReview at load time.
 
 ## TR-AIUNIT-FRONTIER-001
 
@@ -159,6 +223,14 @@
 ## TR-AIUNIT-REVIEW-008
 
 **Review prompts include reply JSON schema** — Built-in AI review prompts must include the JSON schema the agent should use when replying. The YAML prompt text may use a maintained schema token, but the effective prompt loaded at runtime must contain AiReviewFindingsSchema.JsonSchema and no unresolved token.
+
+## TR-AIUNIT-REVIEW-009
+
+**Inject runLog reference into every review JSON path** — AiReviewJson exposes InjectRunLog(reviewJson, runLogRef) that parses the review JSON object and adds a runLog property {path, url?, startedUtc}, preserving all existing properties and re-serializing. AiReviewExecutor applies it to every return path (single-agent pass-through, wrapped error, and multi-agent aggregate). The findings schema (AiReviewFindingsSchema) adds an optional runLog object so the final document validates under additionalProperties:false.
+
+## TR-AIUNIT-REVIEW-010
+
+**Persist a run-log entry per review execution** — AiReviewExecutor captures the test start time and writes a run-log entry per review via an IAiReviewRunLogSink abstraction (default file sink). The entry records startedUtc, reviewType, agent name(s), the effective prompt, provider/model, latency, token usage, optional error, and the final findings JSON. The sink returns an AiReviewRunLogRef (path + optional url + startedUtc) used for injection. The sink is injectable so unit tests use an in-memory fake and integration tests use the file sink against a temp directory.
 
 ## TR-AIUNIT-SCENARIO-001
 

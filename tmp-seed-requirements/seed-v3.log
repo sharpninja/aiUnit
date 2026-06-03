@@ -1,0 +1,25 @@
+=== FR batch ===
+  [FAIL] workflow.requirements.createFrBatch FR x14 (12 s)
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+=== TR batch ===
+  [FAIL] workflow.requirements.createTrBatch TR x14 (13 s)
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+=== TEST batch ===
+  [FAIL] workflow.requirements.createTestBatch TEST x14 (17 s)
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+=== Mappings (one per FR with all its TRs + TESTs) ===

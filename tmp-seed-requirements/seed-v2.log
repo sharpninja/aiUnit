@@ -1,0 +1,65 @@
+
+=== FRs ===
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-001
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-002
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-003
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-004
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-005
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-006
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-007
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-008
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
+  [FAIL] workflow.requirements.createFr FR-AIUNITDESKTOP-009
+  --output tail--
+  Exception: F:\GitHub\mcpserver-claude-code-plugin\lib\Invoke-ClaudeMcpPlugin.ps1:172
+  Line |
+   172 |          throw "Plugin command failed with exit code $($process.ExitCo .
+       |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       | Plugin command failed with exit code 1.
