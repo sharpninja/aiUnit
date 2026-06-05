@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>true</IsPackable>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>aiunit-review</ToolCommandName>
+		<RootNamespace>SharpNinja.AiUnit.Desktop</RootNamespace>
+		<AssemblyName>SharpNinja.AiUnit.Desktop</AssemblyName>
+		<PackageId>SharpNinja.AiUnit.Desktop.Tool</PackageId>
+		<Authors>SharpNinja</Authors>
+		<Company>SharpNinja</Company>
+		<Description>Avalonia 12 desktop tool (dotnet-tool aiunit-review) for discovering and visually reviewing aiUnit wireframe-to-screenshot comparison tests/scenarios (L wireframe / M pwsh chat via Iciclecreek terminal / R screenshot). Hosts Avalonia.RemoteControl debugging services for live inspection.</Description>
+		<PackageProjectUrl>https://github.com/sharpninja/aiUnit</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/sharpninja/aiUnit</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageTags>aiunit;avalonia;desktop;dotnet-tool;wireframe;screenshot;comparison;remote-control;terminal;pwsh</PackageTags>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<NoWarn>$(NoWarn);CS1591;NU1903</NoWarn> <!-- Transitive DBus vuln in Avalonia 11 deps on this env; not relevant to our code. -->
+		<!-- Avalonia -->
+		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Expose internals (e.g. test-only scale mapper) to the test assembly for Byrd TDD AC coverage without making public API -->
+		<InternalsVisibleTo Include="SharpNinja.AiUnit.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj" />
+		<!-- Project ref to sibling's Server for hosting Avalonia.RemoteControl debugging services (per user revision "The tool should host the Avalonia.RemoteControl debugging services and expose them").
+		     This brings Avalonia 12 deps consistently. -->
+		<ProjectReference Include="..\..\..\Avalonia.RemoteControl\src\Avalonia.RemoteControl.Server\Avalonia.RemoteControl.Server.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Avalonia 12 (per user requirement "The tool should be on Avalonia 12" and sibling project using 12.0.3).
+		     Using explicit 12.0.3 to match sibling Directory.Packages.props for consistency with hosting (Avalonia.RemoteControl.Server) and terminal control.
+		     This may require the nuget cache from sibling restore or will pull on restore. -->
+		<PackageReference Include="Avalonia" Version="12.0.3" />
+		<PackageReference Include="Avalonia.Desktop" Version="12.0.3" />
+		<PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
+		<PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3" />
+
+		<!-- For SVG wireframe rendering on LEFT panel.
+		     Svg.Skia / Avalonia.Svg.Skia 12.x versions appear to be in local cache from sibling but not on public feeds visible here.
+		     Uncomment and use when feed is configured, or add as local source. For now, using Image for PNGs and note for SVGs; full SVG support via Skia or package in follow-up.
+		     To enable: <PackageReference Include="Svg.Skia" Version="12.0.3" /> and matching Avalonia.Svg.Skia if published under that. -->
+		<!-- <PackageReference Include="Svg.Skia" Version="12.0.3" /> -->
+		<!-- <PackageReference Include="Avalonia.Svg.Skia" Version="12.0.3" /> -->
+
+		<!-- Exact terminal control from sibling for MIDDLE pwsh chat in CWD (Avalonia 12 compatible). -->
+		<PackageReference Include="Iciclecreek.Avalonia.Terminal" Version="2.0.3" />
+
+		<!-- Icons via Segoe MDL2 Assets (native on Windows) to avoid Avalonia 12 incompatibility with Projektanker 9.x (which pins Avalonia 11). Matches patterns from sibling Avalonia.RemoteControl.Tool. -->
+
+		<!-- For loader (YAML scenarios = aiUnit tests) + sidecars -->
+		<PackageReference Include="YamlDotNet" Version="18.0.0" />
+
+		<!-- For result scoring (AC per TEST-010 / TR) -->
+		<PackageReference Include="JsonSchema.Net" Version="7.3.0" />
+
+		<!-- Hosting via sibling project reference below (brings consistent 12 deps). -->
+	</ItemGroup>
+
+</Project>

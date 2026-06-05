@@ -1,0 +1,9 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SharpNinja.AiUnit.Desktop.App"
+             RequestedThemeVariant="Dark">
+  <!-- Avalonia 12 / 11 dark theme per sibling + wiki spec. Add styles for VS-like when packages restored. -->
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+</Application>
