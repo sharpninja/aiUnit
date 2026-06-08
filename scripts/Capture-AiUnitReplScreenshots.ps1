@@ -131,13 +131,18 @@ body {
 }
 pre {
 	box-sizing: border-box;
-	margin: 0;
-	width: 1152px;
+	margin: 0 auto;
+	width: 120ch;
 	height: 720px;
 	overflow: hidden;
 	white-space: pre;
 	color: #e6edf3;
 	text-shadow: 0 0 0 #e6edf3;
+	/* Use ch units + the exact monospace font metrics so that 120 "columns"
+	   are pixel-consistent across lines. This prevents column drift that
+	   makes box-drawing characters and text look "all over the place"
+	   in the browser screenshot compared to the ideal wireframe grid. */
+	font-variant-ligatures: none;
 }
 </style>
 </head>

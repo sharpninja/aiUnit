@@ -23,6 +23,11 @@ public partial class MainWindow : Window
     private WireframeScenarioLoader? _loader;
     private string _scenariosFolder = string.Empty;
 
+    // Tracks the last MarkupImageViewer the user interacted with (via mouse).
+    // Toolbar zoom level actions (in/out/fit) use this for independent per-image control.
+    // Mode changes (Pan, Highlighter, etc.) are still applied to both for convenience.
+    private Controls.MarkupImageViewer? _activeViewer;
+
     private static readonly (string Label, Avalonia.Media.Stretch Stretch)[] _scaleOptions = new[]
     {
         ("None (1:1)", Avalonia.Media.Stretch.None),
@@ -65,7 +70,60 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Set a default layout immediately (horizontal wireframe-screenshot-terminal) so the
+        // UI is never completely blank while the async scenario loader runs.
+        ReconfigureMainLayout(false);
+
+        SetApplicationVersion();
+
         Loaded += async (_, __) => await TryLoadScenariosAsync();
+    }
+
+    private void SetApplicationVersion()
+    {
+        if (VersionText == null) return;
+
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var info = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            string ver = "0.0.0";
+            if (!string.IsNullOrWhiteSpace(info))
+            {
+                // Show a build-varying version. GitVersion produces things like
+                // "0.11.0-beta.2+Branch.main.Sha.6f7aa7e5..." or similar.
+                // Include a short commit identifier (after + or last . in sha) so the label
+                // is not *always* the same "0.11.0-beta.2" after every commit/redeploy.
+                // Users (and you) can now see that a new build is actually running.
+                var plus = info.IndexOf('+');
+                if (plus > 0)
+                {
+                    var baseVer = info.Substring(0, plus);
+                    var meta = info.Substring(plus + 1);
+                    // Try to extract a short sha (common in InformationalVersion)
+                    var shortSha = meta;
+                    var shaIdx = meta.LastIndexOf('.');
+                    if (shaIdx > 0 && shaIdx < meta.Length - 1)
+                        shortSha = meta.Substring(shaIdx + 1);
+                    if (shortSha.Length > 8) shortSha = shortSha.Substring(0, 8);
+                    ver = string.IsNullOrWhiteSpace(shortSha) ? baseVer : $"{baseVer}+{shortSha}";
+                }
+                else
+                {
+                    ver = info;
+                }
+            }
+            else
+            {
+                ver = asm.GetName().Version?.ToString() ?? "0.0.0";
+            }
+            VersionText.Text = ver;
+        }
+        catch
+        {
+            VersionText.Text = "0.0.0";
+        }
     }
 
     private async Task TryLoadScenariosAsync()
@@ -107,7 +165,17 @@ public partial class MainWindow : Window
                 if (StatusWireframeText != null) StatusWireframeText.Text = "Wireframe: (none)";
                 if (StatusScreenshotText != null) StatusScreenshotText.Text = "Screenshot: (none)";
                 if (StatusText != null) StatusText.Text = "Status: No aiUnit tests found";
+
+                // Default horizontal layout only when there are no scenarios to drive aspect-based layout.
+                ReconfigureMainLayout(false);
             }
+
+            // Wire activation tracking so toolbar zoom level actions can target the last-used image
+            // (mouse wheel/pan are already per-viewer and independent).
+            if (WireframeViewer != null)
+                WireframeViewer.Activated += v => _activeViewer = v;
+            if (ScreenshotViewer != null)
+                ScreenshotViewer.Activated += v => _activeViewer = v;
 
             // Default launch pwsh in CWD (as per requirement)
             // The control is now in XAML; launch on button or auto.
@@ -116,6 +184,18 @@ public partial class MainWindow : Window
             {
                 LaunchShell();
             }
+
+            // Final safety net for the very first ("default") view.
+            // After async scenario load, first Show (which sets Sources + Reconfigure + multiple Applies),
+            // shell launch, and all initial layout passes have settled, force the selected scale one
+            // more time at Loaded priority. This catches any case where an early layout pass "won"
+            // before the images had Sources or the final parent structure (leftStack etc.) was built.
+            var initialScaleIdx = ScaleComboBox?.SelectedIndex ?? -1;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (initialScaleIdx >= 0)
+                    ApplyScaleToImages(initialScaleIdx);
+            }, DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
@@ -198,7 +278,9 @@ public partial class MainWindow : Window
         if (ScaleComboBox == null) return;
         ScaleComboBox.ItemsSource = _scaleOptions.Select(o => o.Label).ToList();
         ScaleComboBox.SelectedIndex = 2; // Fit (uniform) default per AC-UI-005, matches old hardcoded Uniform
-        ApplyScaleToImages(ScaleComboBox.SelectedIndex);
+        // IMPORTANT: Do *not* call Apply here. At this point in load the Images have no Source yet
+        // and the first ShowCurrentScenario will set Sources + Reconfigure the tree + apply scale.
+        // Calling early can lose the effect on the very first layout pass ("default view").
     }
 
     private void OnScaleChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
@@ -209,30 +291,152 @@ public partial class MainWindow : Window
         }
     }
 
+    // Legacy scale path for the old dropdown. Now delegates to the viewer's SetBaseScale
+    // which uses the exact same target size + Stretch logic as the original working direct
+    // Image + Stretch inside ScrollViewer. This guarantees the base "Fit (uniform)" etc.
+    // render the images correctly in the panels. The interactive zoom/pan/markups then
+    // layer on top.
     private void ApplyScaleToImages(int index)
     {
         if (index < 0 || index >= _scaleOptions.Length) return;
+
         var stretch = _scaleOptions[index].Stretch;
-        bool updated = false;
-        if (WireframeImage != null && WireframeImage.Stretch != stretch)
+        WireframeViewer?.SetBaseScale(stretch);
+        ScreenshotViewer?.SetBaseScale(stretch);
+    }
+
+    private static void InvalidateLayoutTarget(Avalonia.Layout.Layoutable? target)
+    {
+        if (target == null) return;
+        target.InvalidateMeasure();
+        target.InvalidateArrange();
+        target.InvalidateVisual();
+
+        // Walk up a few levels (ScrollViewer -> inner Grid -> Border -> leftStack/ContentGrid)
+        var current = target.Parent as Avalonia.Layout.Layoutable;
+        int guard = 0;
+        while (current != null && guard++ < 6)
         {
-            WireframeImage.Stretch = stretch;
-            updated = true;
+            current.InvalidateMeasure();
+            current.InvalidateArrange();
+            current.InvalidateVisual();
+            current = current.Parent as Avalonia.Layout.Layoutable;
         }
-        if (ScreenshotImage != null && ScreenshotImage.Stretch != stretch)
+    }
+
+    private GridSplitter CreateVerticalSplitter() => new GridSplitter
+    {
+        Width = 5,
+        Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Colors.DimGray),
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+        ResizeDirection = GridResizeDirection.Columns,
+    };
+
+    private GridSplitter CreateHorizontalSplitter() => new GridSplitter
+    {
+        Height = 5,
+        Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Colors.DimGray),
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+        ResizeDirection = GridResizeDirection.Rows,
+    };
+
+    /// <summary>
+    /// Reconfigures the main three panels (wireframe, screenshot, terminal) inside ContentGrid.
+    /// Base desired horizontal order: wireframe -> screenshot -> terminal.
+    /// - If the wireframe is landscape or square: place screenshot *under* the wireframe (stacked left area);
+    ///   terminal takes the full right side.
+    /// - If the wireframe is portrait: wireframe | screenshot | terminal (horizontal columns).
+    /// </summary>
+    private void ReconfigureMainLayout(bool wireframeIsLandscapeOrSquare)
+    {
+        if (ContentGrid == null) return;
+
+        DetachFromParent(WireframeBorder);
+        DetachFromParent(ScreenshotBorder);
+        DetachFromParent(TerminalBorder);
+
+        ContentGrid.Children.Clear();
+        ContentGrid.RowDefinitions.Clear();
+        ContentGrid.ColumnDefinitions.Clear();
+
+        if (wireframeIsLandscapeOrSquare)
         {
-            ScreenshotImage.Stretch = stretch;
-            updated = true;
+            // Left stacked area (wireframe on top of screenshot) + right terminal
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var leftStack = new Grid();
+            leftStack.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            leftStack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            leftStack.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            Grid.SetRow(WireframeBorder, 0);
+            leftStack.Children.Add(WireframeBorder);
+
+            var hSplitter = CreateHorizontalSplitter();
+            Grid.SetRow(hSplitter, 1);
+            leftStack.Children.Add(hSplitter);
+
+            Grid.SetRow(ScreenshotBorder, 2);
+            leftStack.Children.Add(ScreenshotBorder);
+
+            Grid.SetColumn(leftStack, 0);
+            ContentGrid.Children.Add(leftStack);
+
+            var vSplitter = CreateVerticalSplitter();
+            Grid.SetColumn(vSplitter, 1);
+            ContentGrid.Children.Add(vSplitter);
+
+            Grid.SetColumn(TerminalBorder, 2);
+            ContentGrid.Children.Add(TerminalBorder);
         }
-        if (updated)
+        else
         {
-            // Ensure the change (especially None vs Fit/Uniform) takes effect immediately,
-            // including re-computing sizes inside the ScrollViewers and updating scrollbars.
-            WireframeImage?.InvalidateMeasure();
-            ScreenshotImage?.InvalidateMeasure();
-            if (WireframeImage?.Parent is Avalonia.Layout.Layoutable wp) wp.InvalidateMeasure();
-            if (ScreenshotImage?.Parent is Avalonia.Layout.Layoutable sp) sp.InvalidateMeasure();
+            // Horizontal: wireframe | screenshot | terminal
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            Grid.SetColumn(WireframeBorder, 0);
+            ContentGrid.Children.Add(WireframeBorder);
+
+            var vs1 = CreateVerticalSplitter();
+            Grid.SetColumn(vs1, 1);
+            ContentGrid.Children.Add(vs1);
+
+            Grid.SetColumn(ScreenshotBorder, 2);
+            ContentGrid.Children.Add(ScreenshotBorder);
+
+            var vs2 = CreateVerticalSplitter();
+            Grid.SetColumn(vs2, 3);
+            ContentGrid.Children.Add(vs2);
+
+            Grid.SetColumn(TerminalBorder, 4);
+            ContentGrid.Children.Add(TerminalBorder);
         }
+
+        // After any structural reconfigure (including the initial placeholder one in the ctor and
+        // the aspect-driven one in ShowCurrentScenario), re-enforce the current scale if the
+        // dropdown is ready and the image controls exist. This guarantees the Stretch is set
+        // on the Images while they live in their final parents (ContentGrid cols or the dynamic
+        // leftStack for landscape/square wireframes). Callers like Show will still do a full
+        // Apply + UpdateLayout immediately after, but this makes the "default view" correct
+        // even if a layout pass sneaks in between.
+        if (ScaleComboBox?.SelectedIndex >= 0 && WireframeViewer != null && ScreenshotViewer != null)
+        {
+            ApplyScaleToImages(ScaleComboBox.SelectedIndex);
+        }
+    }
+
+    private static void DetachFromParent(Control? control)
+    {
+        if (control?.Parent is Panel panel)
+            panel.Children.Remove(control);
     }
 
     // --- Verdict + navigation support (user: "There's now way to specify a verdict") ---
@@ -257,26 +461,51 @@ public partial class MainWindow : Window
         if (PrevButton != null) PrevButton.IsEnabled = index > 0;
         if (NextButton != null) NextButton.IsEnabled = index < _scenarios.Count - 1;
 
-        // Images (same resolution rules as before)
-        WireframeImage.Source = File.Exists(s.WireframeScreenshotFullPath)
+        // Images (now hosted inside MarkupImageViewer which handles zoom/pan/markup)
+        WireframeViewer.Source = File.Exists(s.WireframeScreenshotFullPath)
             ? new Avalonia.Media.Imaging.Bitmap(s.WireframeScreenshotFullPath)
             : null;
         WireframePathText.Text = $"Wireframe: {Path.GetFileName(s.WireframeScreenshotPath ?? "")}";
 
-        ScreenshotImage.Source = File.Exists(s.ActualScreenshotFullPath)
+        ScreenshotViewer.Source = File.Exists(s.ActualScreenshotFullPath)
             ? new Avalonia.Media.Imaging.Bitmap(s.ActualScreenshotFullPath)
             : null;
         ScreenshotPathText.Text = $"Screenshot: {Path.GetFileName(s.ActualScreenshotPath ?? "")}";
 
-        // Status bar panels (same widths as main 3-col body): place filenames in corresponding columns
-        if (StatusWireframeText != null)
-            StatusWireframeText.Text = $"Wireframe: {Path.GetFileName(s.WireframeScreenshotPath ?? "")}";
-        if (StatusScreenshotText != null)
-            StatusScreenshotText.Text = $"Screenshot: {Path.GetFileName(s.ActualScreenshotPath ?? "")}";
+        // Decide layout based on wireframe aspect ratio (per user request)
+        bool wireframeIsLandscapeOrSquare = true; // default: screenshot under wireframe + terminal on right
+        if (WireframeViewer?.Source is Avalonia.Media.Imaging.Bitmap wBmp &&
+            wBmp.PixelSize.Width > 0 && wBmp.PixelSize.Height > 0)
+        {
+            wireframeIsLandscapeOrSquare = wBmp.PixelSize.Height <= wBmp.PixelSize.Width;
+        }
+        ReconfigureMainLayout(wireframeIsLandscapeOrSquare);
 
-        // keep current scale
-        if (ScaleComboBox?.SelectedIndex >= 0)
-            ApplyScaleToImages(ScaleComboBox.SelectedIndex);
+        // Settle the layout after reconfiguring the panels.
+        this.UpdateLayout();
+
+        // Defer the base scale apply (Fit/Uniform etc from dropdown or default).
+        // After ReconfigureMainLayout the Borders are reparented into ContentGrid or the
+        // dynamic leftStack (for landscape/square wireframes). Even with UpdateLayout the
+        // inner ScrollViewer.Viewport in the MarkupImageViewer can still be 0 or stale on
+        // this pass (star rows / arrange timing). SetBaseScale now has its own fallback +
+        // Post retry, but wrapping the call here at Background gives the layout a chance
+        // to produce a real positive viewport for the first paint. This (with the sizing
+        // fixes inside the viewer) makes the images visible instead of solid black panels.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ScaleComboBox?.SelectedIndex >= 0 && ScaleComboBox.SelectedIndex < _scaleOptions.Length)
+            {
+                var stretch = _scaleOptions[ScaleComboBox.SelectedIndex].Stretch;
+                WireframeViewer?.SetBaseScale(stretch);
+                ScreenshotViewer?.SetBaseScale(stretch);
+            }
+            else
+            {
+                WireframeViewer?.SetBaseScale(Avalonia.Media.Stretch.Uniform);
+                ScreenshotViewer?.SetBaseScale(Avalonia.Media.Stretch.Uniform);
+            }
+        }, DispatcherPriority.Background);
 
         // populate verdict editor from persisted sidecar (if any)
         PopulateVerdictControls(s.HumanReview);
@@ -370,6 +599,70 @@ public partial class MainWindow : Window
         if (VerdictCombo == null) return;
         VerdictCombo.ItemsSource = new[] { "approved", "rejected", "needs-changes" };
         VerdictCombo.SelectedIndex = 0;
+    }
+
+    // === Toolbar handlers for new zoom/pan + markup requirements ===
+
+    private void ToolbarPanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.SetTool(Controls.MarkupImageViewer.Tool.Pan);
+        ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.Pan);
+    }
+
+    private void ToolbarZoomInClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var target = _activeViewer ?? WireframeViewer;
+        target?.ZoomIn();
+    }
+
+    private void ToolbarZoomOutClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var target = _activeViewer ?? WireframeViewer;
+        target?.ZoomOut();
+    }
+
+    private void ToolbarFitClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Fit is commonly wanted on both for comparison reset, but we respect active if set.
+        // User can always use mouse wheel on the specific image for independent control.
+        var target = _activeViewer;
+        if (target != null)
+            target.FitToView();
+        else
+        {
+            WireframeViewer?.FitToView();
+            ScreenshotViewer?.FitToView();
+        }
+    }
+
+    private void ToolbarBoxZoomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.SetTool(Controls.MarkupImageViewer.Tool.BoxZoom);
+        ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.BoxZoom);
+    }
+
+    private void ToolbarHighlighterClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.SetTool(Controls.MarkupImageViewer.Tool.Highlighter);
+        ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.Highlighter);
+    }
+
+    private void ToolbarTextAreaClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.SetTool(Controls.MarkupImageViewer.Tool.TextArea);
+        ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.TextArea);
+    }
+
+    private void ToolbarArrowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.SetTool(Controls.MarkupImageViewer.Tool.Arrow);
+        ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.Arrow);
+    }
+
+    private void ToolbarClearMarkupsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WireframeViewer?.ClearMarkups();
+        ScreenshotViewer?.ClearMarkups();
     }
 
     // Paste the (single-line) prompt into the terminal (via XTerm send or pty writer paste path).

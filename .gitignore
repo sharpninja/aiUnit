@@ -34,3 +34,16 @@ docs/todo.yaml
 
 AGENTS-README-FIRST.yaml
 .mcpServer/
+
+# Grok local MCP config (workspace auth headers)
+.grok/
+
+# Session / temporary files (Grok AI, MCP, local scratch)
+cache/
+.tmp/
+tmp-*.yaml
+tmp-open-params.yaml
+tmp-seed-requirements/
+
+# Nuke build temps (logs, attempts)
+.nuke/temp/

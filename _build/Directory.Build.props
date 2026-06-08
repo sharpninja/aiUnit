@@ -1,0 +1,15 @@
+<Project>
+  <!-- 
+    This file stops the root Directory.Build.props (which injects GitVersion.MsBuild and other custom targets)
+    from interfering with the Nuke build project.
+  -->
+  <PropertyGroup>
+    <GitVersionSkip>true</GitVersionSkip>
+    <ImportGitVersionTargets>false</ImportGitVersionTargets>
+    <!-- Avoid other custom props that may assume being a library/tool project -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Do not import the parent Directory.Build.props for this subtree -->
+  <Import Project="..\Directory.Build.props" Condition="false" />
+</Project>

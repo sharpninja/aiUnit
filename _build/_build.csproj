@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace></RootNamespace>
+    <NoWarn>CS0649;CS0169;CA1050;CA1707;CA1724;CA2227</NoWarn>
+    <NukeVersion>8.1.4</NukeVersion>
+    <NukeRootDirectory>..</NukeRootDirectory>
+    <NukeScriptDirectory>..</NukeScriptDirectory>
+    <NukeTelemetryVersion>1</NukeTelemetryVersion>
+    <!-- Prevent GitVersion MSBuild integration (from Directory.Build.props) from running against the Nuke build project -->
+    <GitVersionSkip>true</GitVersionSkip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nuke.Common" Version="$(NukeVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageDownload Include="GitVersion.Tool" Version="[6.0.5]" />
+  </ItemGroup>
+
+</Project>

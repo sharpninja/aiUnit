@@ -25,12 +25,7 @@ public sealed class AiUnitReplCommandLineTests
 		Assert.Equal("aiunit", ProjectProperty(project, "ToolCommandName"));
 		Assert.Equal("SharpNinja.aiUnit.Tool", ProjectProperty(project, "PackageId"));
 		Assert.DoesNotContain(project.Descendants("Version"), element => element.Parent?.Name == "PropertyGroup");
-		Assert.Contains(
-			project.Descendants("PackageReference"),
-			reference =>
-				reference.Attribute("Include")?.Value == "GitVersion.MsBuild"
-				&& reference.Attribute("Version")?.Value == "6.7.0"
-				&& reference.Attribute("PrivateAssets")?.Value == "All");
+		// GitVersion.MsBuild is injected for all projects via Directory.Build.props (no explicit ref needed in individual .csproj files)
 		Assert.Contains(
 			project.Descendants("ProjectReference"),
 			reference => reference.Attribute("Include")?.Value == @"..\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj");
@@ -194,6 +189,21 @@ public sealed class AiUnitReplCommandLineTests
 		Assert.Equal(string.Empty, stdout.ToString());
 		Assert.Contains("Unsupported aiUnit mode 'bogus'", stderr.ToString(), StringComparison.Ordinal);
 		Assert.Contains("Usage:", stderr.ToString(), StringComparison.Ordinal);
+	}
+
+	[Theory]
+	[InlineData("set-active foo --project bar")]
+	[InlineData("add-strategy mystrat --project p1 --kind openai-compatible")]
+	[InlineData("edit-strategy mystrat --project p1")]
+	[InlineData("remove-strategy mystrat --project p1")]
+	[InlineData("export --project p1")]
+	public void Parse_AliasCommands_RecognizeNewModes(string command)
+	{
+		var args = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+		var result = AiUnitReplCommandLine.Parse(args);
+
+		Assert.True(result.Success, $"Parse failed for '{command}': {result.Error}");
+		// Dispatch verified in Execute tests or manual; Parse now recognizes per FR-AIUNITREPL-003
 	}
 
 	private static string FindRepoRoot()

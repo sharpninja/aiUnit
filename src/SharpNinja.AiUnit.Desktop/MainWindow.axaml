@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:SharpNinja.AiUnit.Desktop"
+        xmlns:controls="using:SharpNinja.AiUnit.Desktop.Controls"
         xmlns:terminal="using:Iciclecreek.Terminal"
         x:Class="SharpNinja.AiUnit.Desktop.MainWindow"
         Title="aiunit-review - Wireframe Comparison (Avalonia 12 dotnet-tool)"
@@ -22,6 +23,37 @@
         <TextBlock Text="   Scale:" VerticalAlignment="Center" Margin="12,0,4,0" />
         <!-- Dropdown for scaling types (none, stretch, fit, etc). SelectionChanged wired to codebehind to update both Images' Stretch -->
         <ComboBox x:Name="ScaleComboBox" Width="150" VerticalAlignment="Center" SelectionChanged="OnScaleChanged" />
+
+        <!-- New interactive toolbar (per new requirements) -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+          <Button ToolTip.Tip="Pan (middle mouse or drag in Pan mode)" Margin="1" Padding="4,2" Click="ToolbarPanClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7C9;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Zoom In" Margin="1" Padding="4,2" Click="ToolbarZoomInClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A3;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Zoom Out" Margin="1" Padding="4,2" Click="ToolbarZoomOutClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A4;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Fit to View" Margin="1" Padding="4,2" Click="ToolbarFitClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7C4;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Box Zoom (selection box)" Margin="1" Padding="4,2" Click="ToolbarBoxZoomClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7C3;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Highlighter Markup" Margin="1" Padding="4,2" Click="ToolbarHighlighterClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7C6;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Text Area Markup" Margin="1" Padding="4,2" Click="ToolbarTextAreaClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7C8;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Arrow Markup (10px circle at head)" Margin="1" Padding="4,2" Click="ToolbarArrowClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7EA;" FontSize="14" />
+          </Button>
+          <Button ToolTip.Tip="Clear all markups on active images" Margin="1" Padding="4,2" Click="ToolbarClearMarkupsClicked">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE894;" FontSize="14" />
+          </Button>
+        </StackPanel>
       </StackPanel>
       <!-- Spacer column pushes the next to far right -->
       <!-- Buttons on far right, standard visible borders (no BorderThickness=0 or transparent bg) -->
@@ -38,35 +70,42 @@
     <!-- 3-panel body with resizable splitters between panels (per request).
          Columns: * (wireframe) | Auto (splitter) | * (terminal) | Auto (splitter) | * (screenshot).
          Content columns remain proportional (*) by default; splitters allow drag-resize. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*,Auto,*" Margin="4">
-      <!-- LEFT: Wireframe baseline. Wrapped in ScrollViewer for AC-UI-002 (panning large/none-scale images) -->
-      <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="2" Background="#1E1E1E">
+    <Grid x:Name="ContentGrid" Grid.Row="1" Margin="4">
+      <!-- Content panels + splitters are reconfigured in code (ReconfigureMainLayout) based on wireframe aspect ratio.
+           Desired base order: wireframe -> screenshot -> terminal.
+           - If wireframe landscape or square: screenshot placed under the wireframe (stacked left area), terminal on right (full height).
+           - If wireframe portrait: wireframe | screenshot | terminal (all horizontal with vertical splitters). -->
+    </Grid>
+
+    <!-- Hidden hosts: XAML initializes the complex named panels (including internal Images, TerminalControl, buttons, etc.)
+         and wires event handlers. Code moves the *Border elements into the live ContentGrid (and nests for stacking). -->
+    <Grid x:Name="PanelHosts" IsVisible="False">
+      <!-- Wireframe panel -->
+      <Border x:Name="WireframeBorder" BorderBrush="Gray" BorderThickness="1" Margin="2" Background="#1E1E1E">
         <Grid RowDefinitions="Auto,*,Auto">
-          <TextBlock Text="Wireframe (LEFT)" FontWeight="Bold" Margin="4" />
-          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <Image x:Name="WireframeImage" />
-          </ScrollViewer>
+          <TextBlock Text="Wireframe" FontWeight="Bold" Margin="4" />
+          <controls:MarkupImageViewer x:Name="WireframeViewer" Grid.Row="1" />
           <TextBlock Grid.Row="2" x:Name="WireframePathText" FontSize="10" Foreground="Gray" Margin="4" TextWrapping="Wrap" />
         </Grid>
       </Border>
 
-      <!-- Vertical splitter between wireframe and terminal -->
-      <GridSplitter Grid.Column="1"
-                    Width="5"
-                    Background="#555"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    ResizeDirection="Columns" />
+      <!-- Screenshot panel -->
+      <Border x:Name="ScreenshotBorder" BorderBrush="Gray" BorderThickness="1" Margin="2" Background="#1E1E1E">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBlock Text="Screenshot" FontWeight="Bold" Margin="4" />
+          <controls:MarkupImageViewer x:Name="ScreenshotViewer" Grid.Row="1" />
+          <TextBlock Grid.Row="2" x:Name="ScreenshotPathText" FontSize="10" Foreground="Gray" Margin="4" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
 
-      <!-- MIDDLE: Terminal - exact control and launch pattern from sibling F:\GitHub\Avalonia.RemoteControl\src\Avalonia.RemoteControl.Tool\ToolPanels\TerminalPanel.axaml + .cs + ViewModel for pwsh CWD -->
-      <Border Grid.Column="2" BorderBrush="Blue" BorderThickness="2" Margin="2" Background="#0C0C0C">
+      <!-- Terminal panel (full content preserved) -->
+      <Border x:Name="TerminalBorder" BorderBrush="Blue" BorderThickness="2" Margin="2" Background="#0C0C0C">
         <Grid RowDefinitions="Auto,*">
           <StackPanel Margin="4">
-            <TextBlock Text="Chat / Terminal (MIDDLE) - pwsh in CWD" FontWeight="Bold" Foreground="LightBlue" />
+            <TextBlock Text="Chat / Terminal - pwsh in CWD" FontWeight="Bold" Foreground="LightBlue" />
             <StackPanel Orientation="Horizontal" Margin="0,4">
               <Button x:Name="LaunchShellButton" Content="Launch pwsh" Click="LaunchShellClicked" />
               <Button x:Name="StopButton" Content="Stop" Click="StopClicked" Margin="4,0" />
-              <!-- Send button using Segoe MDL2 glyph (paper-plane equivalent / send) -->
               <Button x:Name="SendPromptButton" Click="SendReviewPromptClicked" Margin="4,0" Width="28" Height="28" ToolTip.Tip="Send path of current scenario YAML to terminal (informs agent of navigation + review task from the yaml file)" IsEnabled="False" Padding="0" BorderThickness="0" Background="Transparent">
                 <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE724;" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Center" />
               </Button>
@@ -77,25 +116,6 @@
                                     FontFamily="MesloLGL NFM, Cascadia Mono, Consolas" FontSize="12"
                                     Background="#0C0C0C" Foreground="#F1F1F1"
                                     ProcessExited="TerminalProcessExited" />
-        </Grid>
-      </Border>
-
-      <!-- Vertical splitter between terminal and screenshot -->
-      <GridSplitter Grid.Column="3"
-                    Width="5"
-                    Background="#555"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    ResizeDirection="Columns" />
-
-      <!-- RIGHT: Actual screenshot PNG. Wrapped in ScrollViewer for panning (AC-UI-002) -->
-      <Border Grid.Column="4" BorderBrush="Gray" BorderThickness="1" Margin="2" Background="#1E1E1E">
-        <Grid RowDefinitions="Auto,*,Auto">
-          <TextBlock Text="Screenshot (RIGHT)" FontWeight="Bold" Margin="4" />
-          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <Image x:Name="ScreenshotImage" />
-          </ScrollViewer>
-          <TextBlock Grid.Row="2" x:Name="ScreenshotPathText" FontSize="10" Foreground="Gray" Margin="4" TextWrapping="Wrap" />
         </Grid>
       </Border>
     </Grid>
@@ -123,7 +143,10 @@
       <!-- spacer col 3 (over splitter) -->
 
       <!-- Right panel (under screenshot col 4) -->
-      <TextBlock Grid.Column="4" x:Name="StatusScreenshotText" FontSize="10" Foreground="Gray" Margin="4" VerticalAlignment="Top" Text="Screenshot: ..." />
+      <DockPanel Grid.Column="4" LastChildFill="False" VerticalAlignment="Center">
+        <TextBlock x:Name="StatusScreenshotText" DockPanel.Dock="Left" FontSize="10" Foreground="Gray" Margin="4" VerticalAlignment="Center" Text="Screenshot: ..." />
+        <TextBlock x:Name="VersionText" DockPanel.Dock="Right" FontSize="9" Foreground="DimGray" Margin="8,0,4,0" VerticalAlignment="Center" />
+      </DockPanel>
     </Grid>
   </Grid>
 </Window>

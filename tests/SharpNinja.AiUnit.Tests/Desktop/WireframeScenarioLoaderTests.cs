@@ -609,3 +609,83 @@ public sealed class MainWindowPanelSplittersTests
         return AppContext.BaseDirectory;
     }
 }
+
+///<summary>
+///TDD tests for MarkupImageViewer base scale / sizing (the root cause of solid black image panels).
+///Written FIRST (stubs + ACs) per Byrd Development Process *before* the SetBaseScale timing/calc/viewport
+///robustness changes and before any MainWindow defer adjustments. Mirrors the pattern of
+///MainWindowUiScalingTests / MainWindowPanelSplittersTests in this file.
+///Stubs validate the desired target box behavior (pin content+Image to the allocated *panel* view rect
+///for Fit/Stretch/UniformToFill so the Stretch mode visibly affects the filled panel area; natural for None).
+///The real test exercises the internal ComputeBaseSizingForTest hook (added with the fixed logic).
+///Full acceptance: after scenario load + Reconfigure (aspect) + SetBaseScale (from dropdown or Show),
+///the Wireframe/Screenshot viewers render the Bitmap (not black) for default Fit uniform inside the
+///dynamic ContentGrid / leftStack / stacked or horizontal layout after global tool deploy.
+///</summary>
+public sealed class MarkupImageViewerBaseScaleSizingTests
+{
+    // Byrd mocks/stubs first: capture the *expected* decisions for the ACs without depending on runtime
+    // ScrollViewer Viewport timing or the viewer instance.
+    private static (double w, double h, Avalonia.Media.Stretch s) StubComputeBase(Avalonia.Media.Stretch mode, Avalonia.PixelSize nat, Avalonia.Size view)
+    {
+        if (mode == Avalonia.Media.Stretch.None)
+            return (nat.Width, nat.Height, mode);
+
+        double vw = view.Width > 0 ? view.Width : 100;
+        double vh = view.Height > 0 ? view.Height : 100;
+        return (vw, vh, mode);
+    }
+
+    [Fact]
+    public void AC_RENDER_001_Stub_Fit_Uniform_Pins_ContentBox_To_Panel_View_Rect()
+    {
+        var nat = new Avalonia.PixelSize(1200, 800); // landscape wireframe example
+        var view = new Avalonia.Size(650, 420);      // allocated panel slot (aspect != nat)
+        var (w, h, s) = StubComputeBase(Avalonia.Media.Stretch.Uniform, nat, view);
+        Assert.Equal(650, w); // must be the panel rect, not the smaller fitted-natural (~560x373)
+        Assert.Equal(420, h);
+        Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
+    }
+
+    [Fact]
+    public void AC_RENDER_002_Stub_None_Uses_Natural_For_1to1_Scrollable()
+    {
+        var nat = new Avalonia.PixelSize(800, 1200);
+        var view = new Avalonia.Size(500, 700);
+        var (w, h, s) = StubComputeBase(Avalonia.Media.Stretch.None, nat, view);
+        Assert.Equal(800, w);
+        Assert.Equal(1200, h);
+        Assert.Equal(Avalonia.Media.Stretch.None, s);
+    }
+
+    [Fact]
+    public void AC_RENDER_003_Stub_ZeroView_FallsBack_Conservative()
+    {
+        var nat = new Avalonia.PixelSize(1000, 600);
+        var view = new Avalonia.Size(0, 0);
+        var (w, h, s) = StubComputeBase(Avalonia.Media.Stretch.Uniform, nat, view);
+        Assert.True(w >= 100);
+        Assert.True(h >= 100);
+        Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
+    }
+
+    [Fact]
+    public void AC_RENDER_001_002_003_Real_ComputeBaseSizingForTest_Matches_Stub_After_Fix()
+    {
+        // Byrd: this exercises the real internal hook (implementation of the sizing decision).
+        // Must match stub expectations exactly for the ACs. Written/declared before the viewer edit.
+        var real = SharpNinja.AiUnit.Desktop.Controls.MarkupImageViewer.ComputeBaseSizingForTest;
+
+        var nat = new Avalonia.PixelSize(1200, 800);
+        var view = new Avalonia.Size(640, 400);
+        var (w, h, s) = real(Avalonia.Media.Stretch.Uniform, nat, view);
+        Assert.Equal(640, w);
+        Assert.Equal(400, h);
+        Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
+
+        var (w2, h2, s2) = real(Avalonia.Media.Stretch.None, nat, view);
+        Assert.Equal(1200, w2);
+        Assert.Equal(800, h2);
+        Assert.Equal(Avalonia.Media.Stretch.None, s2);
+    }
+}

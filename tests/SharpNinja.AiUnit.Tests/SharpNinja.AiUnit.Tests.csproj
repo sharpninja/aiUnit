@@ -17,8 +17,12 @@
 		<PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
 		<PackageReference Include="NSubstitute" Version="5.3.0" />
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
 		<PackageReference Include="YamlDotNet" Version="18.0.0" />
+		<!-- Explicit Avalonia 12 to resolve version conflicts when testing Desktop (which uses 12.0.3 + Iciclecreek that may pull older).
+		     Required for compiling tests that touch Avalonia types via the MapScale... internal (AC_UI tests) and Desktop project ref.
+		     Matches the "The tool should be on Avalonia 12" requirement. -->
+		<PackageReference Include="Avalonia" Version="12.0.3" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -28,6 +32,8 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\SharpNinja.AiUnit\SharpNinja.AiUnit.csproj" />
 		<ProjectReference Include="..\..\src\SharpNinja.AiUnit.Repl\SharpNinja.AiUnit.Repl.csproj" />
+		<!-- NEW per plan slice 0: ref desktop for loader + services tests (mocks-first TDD for AC-LOAD-* etc.) -->
+		<ProjectReference Include="..\..\src\SharpNinja.AiUnit.Desktop\SharpNinja.AiUnit.Desktop.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

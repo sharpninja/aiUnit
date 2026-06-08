@@ -19,6 +19,11 @@ public enum AiUnitReplMode
 	Apply,
 	ApplyGlobal,
 	Restore,
+	SetActive,
+	AddStrategy,
+	EditStrategy,
+	RemoveStrategy,
+	Export,
 }
 
 public sealed record AiUnitReplOptions(
@@ -32,7 +37,8 @@ public sealed record AiUnitReplOptions(
 	string? SourceProjectName,
 	string? SnapshotPath,
 	bool DryRun,
-	bool Force);
+	bool Force,
+	string? Kind = null);
 
 public sealed record AiUnitReplParseResult(
 	AiUnitReplOptions? Options,
@@ -61,6 +67,7 @@ public static class AiUnitReplCommandLine
 		string? snapshotPath = null;
 		var dryRun = false;
 		var force = false;
+		string? kind = null;
 
 		for (var i = 0; i < args.Count; i++)
 		{
@@ -121,6 +128,13 @@ public static class AiUnitReplCommandLine
 					break;
 				case "--force":
 					force = true;
+					break;
+				case "--kind":
+					if (!TryReadValue(args, ref i, "--kind", out kind, out var kindError))
+					{
+						return Error(kindError);
+					}
+
 					break;
 				case "--mode":
 					if (!TryReadValue(args, ref i, "--mode", out var modeValue, out var modeError))
@@ -202,6 +216,17 @@ public static class AiUnitReplCommandLine
 						break;
 					}
 
+					if (arg.StartsWith("--kind=", StringComparison.Ordinal))
+					{
+						kind = arg["--kind=".Length..];
+						if (string.IsNullOrWhiteSpace(kind))
+						{
+							return Error("--kind requires a non-empty value.");
+						}
+
+						break;
+					}
+
 					if (arg.StartsWith("--mode=", StringComparison.Ordinal))
 					{
 						var inlineMode = arg["--mode=".Length..];
@@ -244,6 +269,12 @@ public static class AiUnitReplCommandLine
 						break;
 					}
 
+					if (modeSet && (mode == AiUnitReplMode.SetActive || mode == AiUnitReplMode.AddStrategy || mode == AiUnitReplMode.EditStrategy || mode == AiUnitReplMode.RemoveStrategy) && strategyName is null)
+					{
+						strategyName = arg;
+						break;
+					}
+
 					return arg.StartsWith("-", StringComparison.Ordinal)
 						? Error($"Unknown aiUnit option '{arg}'.")
 						: Error($"Unknown aiUnit command '{arg}'.");
@@ -265,17 +296,28 @@ public static class AiUnitReplCommandLine
 			return Error($"{ModeName(mode)} requires a strategy name.");
 		}
 
+		if ((mode == AiUnitReplMode.SetActive || mode == AiUnitReplMode.AddStrategy || mode == AiUnitReplMode.EditStrategy || mode == AiUnitReplMode.RemoveStrategy) && string.IsNullOrWhiteSpace(strategyName))
+		{
+			return Error($"{ModeName(mode)} requires <strategy>.");
+		}
+
+		if ((mode == AiUnitReplMode.SetActive || mode == AiUnitReplMode.AddStrategy || mode == AiUnitReplMode.EditStrategy || mode == AiUnitReplMode.RemoveStrategy) && string.IsNullOrWhiteSpace(target))
+		{
+			return Error($"{ModeName(mode)} requires --project <name>.");
+		}
+
 		if (mode == AiUnitReplMode.Apply && string.IsNullOrWhiteSpace(target))
 		{
 			return Error("apply requires --project <name>.");
 		}
 
-		return Success(Options(mode));
+		return Success(Options(mode, kind: kind));
 
 		AiUnitReplOptions Options(
 			AiUnitReplMode selectedMode,
 			bool showHelp = false,
-			bool showVersion = false) =>
+			bool showVersion = false,
+			string? kind = null) =>
 			new(
 				selectedMode,
 				showHelp,
@@ -287,7 +329,8 @@ public static class AiUnitReplCommandLine
 				sourceProjectName,
 				snapshotPath,
 				dryRun,
-				force);
+				force,
+				kind);
 	}
 
 	public static Task<int> ExecuteAsync(
@@ -366,6 +409,11 @@ public static class AiUnitReplCommandLine
 		writer.WriteLine("  aiunit apply <strategy> --project <project> [--from <project>] [--dry-run] [--force]");
 		writer.WriteLine("  aiunit apply-global <strategy> [--from <project>] [--dry-run] [--force]");
 		writer.WriteLine("  aiunit restore <project> [--snapshot <path>]");
+		writer.WriteLine("  aiunit set-active <strategy> --project <project>");
+		writer.WriteLine("  aiunit add-strategy <name> --project <project> [--kind <kind>]");
+		writer.WriteLine("  aiunit edit-strategy <name> --project <project> [--kind <kind>]");
+		writer.WriteLine("  aiunit remove-strategy <name> --project <project>");
+		writer.WriteLine("  aiunit export [--project <project>]");
 		writer.WriteLine("  aiunit --mode <repl|tui|scan|list|catalog|validate> [--workspace <path>]");
 		writer.WriteLine("  aiunit --help");
 		writer.WriteLine("  aiunit --version");
@@ -380,6 +428,11 @@ public static class AiUnitReplCommandLine
 		writer.WriteLine("  apply   Apply one catalog strategy to a selected project.");
 		writer.WriteLine("  apply-global   Apply one catalog strategy to every discovered project.");
 		writer.WriteLine("  restore   Restore a project config from the latest or selected snapshot.");
+		writer.WriteLine("  set-active   Set active strategy for a project.");
+		writer.WriteLine("  add-strategy   Add or update a strategy for a project.");
+		writer.WriteLine("  edit-strategy   Edit a strategy for a project.");
+		writer.WriteLine("  remove-strategy   Remove a strategy from a project.");
+		writer.WriteLine("  export   Export project config or strategies.");
 		writer.WriteLine("  validate   Validate discovered project configuration.");
 	}
 
@@ -414,6 +467,16 @@ public static class AiUnitReplCommandLine
 				return WriteApply(options, stdout);
 			case AiUnitReplMode.Restore:
 				return WriteRestore(options, stdout, stderr);
+			case AiUnitReplMode.SetActive:
+				return WriteSetActive(options, stdout, stderr);
+			case AiUnitReplMode.AddStrategy:
+				return WriteAddStrategy(options, stdout, stderr);
+			case AiUnitReplMode.EditStrategy:
+				return WriteEditStrategy(options, stdout, stderr);
+			case AiUnitReplMode.RemoveStrategy:
+				return WriteRemoveStrategy(options, stdout, stderr);
+			case AiUnitReplMode.Export:
+				return WriteExport(options, stdout, stderr);
 			default:
 				return RunRepl(options, stdin, stdout, stderr, emitPrompt);
 		}
@@ -511,7 +574,7 @@ public static class AiUnitReplCommandLine
 
 			if (parsed.Options.Mode == AiUnitReplMode.Repl)
 			{
-				stderr.WriteLine("Enter a command such as scan, list, show, catalog, validate, apply, restore, or tui.");
+				stderr.WriteLine("Enter a command such as scan, list, show, catalog, validate, apply, restore, set-active, add-strategy, edit-strategy, remove-strategy, export, or tui.");
 				exitCode = 2;
 				continue;
 			}
@@ -532,11 +595,16 @@ public static class AiUnitReplCommandLine
 	private static void WriteReplHelp(TextWriter writer)
 	{
 		writer.WriteLine("Commands:");
-		writer.WriteLine("  scan | list | catalog | validate");
+		writer.WriteLine("  scan | list | catalog | validate | set-active | add-strategy | edit-strategy | remove-strategy | export");
 		writer.WriteLine("  show <project>");
 		writer.WriteLine("  apply <strategy> --project <project> [--from <project>] [--dry-run] [--force]");
 		writer.WriteLine("  apply-global <strategy> [--from <project>] [--dry-run] [--force]");
 		writer.WriteLine("  restore <project> [--snapshot <path>]");
+		writer.WriteLine("  set-active <strategy> --project <project>");
+		writer.WriteLine("  add-strategy <name> --project <project> [--kind <kind>]");
+		writer.WriteLine("  edit-strategy <name> --project <project> [--kind <kind>]");
+		writer.WriteLine("  remove-strategy <name> --project <project>");
+		writer.WriteLine("  export [--project <project>]");
 		writer.WriteLine("  tui [overview|projects|catalog|validate]");
 		writer.WriteLine("  help | version | exit");
 	}
@@ -887,6 +955,36 @@ public static class AiUnitReplCommandLine
 			return true;
 		}
 
+		if (string.Equals(value, "set-active", StringComparison.OrdinalIgnoreCase))
+		{
+			mode = AiUnitReplMode.SetActive;
+			return true;
+		}
+
+		if (string.Equals(value, "add-strategy", StringComparison.OrdinalIgnoreCase))
+		{
+			mode = AiUnitReplMode.AddStrategy;
+			return true;
+		}
+
+		if (string.Equals(value, "edit-strategy", StringComparison.OrdinalIgnoreCase))
+		{
+			mode = AiUnitReplMode.EditStrategy;
+			return true;
+		}
+
+		if (string.Equals(value, "remove-strategy", StringComparison.OrdinalIgnoreCase))
+		{
+			mode = AiUnitReplMode.RemoveStrategy;
+			return true;
+		}
+
+		if (string.Equals(value, "export", StringComparison.OrdinalIgnoreCase))
+		{
+			mode = AiUnitReplMode.Export;
+			return true;
+		}
+
 		return false;
 	}
 
@@ -903,6 +1001,11 @@ public static class AiUnitReplCommandLine
 			AiUnitReplMode.Apply => "apply",
 			AiUnitReplMode.ApplyGlobal => "apply-global",
 			AiUnitReplMode.Restore => "restore",
+			AiUnitReplMode.SetActive => "set-active",
+			AiUnitReplMode.AddStrategy => "add-strategy",
+			AiUnitReplMode.EditStrategy => "edit-strategy",
+			AiUnitReplMode.RemoveStrategy => "remove-strategy",
+			AiUnitReplMode.Export => "export",
 			_ => mode.ToString(),
 		};
 
@@ -925,6 +1028,115 @@ public static class AiUnitReplCommandLine
 			AiUnitDiscoveryStatus.Error => "error",
 			_ => status.ToString().ToLowerInvariant(),
 		};
+
+	private static int WriteSetActive(AiUnitReplOptions options, TextWriter stdout, TextWriter stderr)
+	{
+		if (string.IsNullOrWhiteSpace(options.StrategyName) || string.IsNullOrWhiteSpace(options.Target))
+		{
+			stderr.WriteLine("set-active requires <strategy> and --project <name>");
+			return 1;
+		}
+
+		var discovery = AiUnitWorkspaceDiscovery.Discover(WorkspaceDisplay(options.WorkspacePath));
+		var project = discovery.FindProject(options.Target);
+		if (project is null || project.ConfigPath is null)
+		{
+			stderr.WriteLine($"Project '{options.Target}' not found or has no config file.");
+			return 1;
+		}
+
+		var editor = AiUnitStrategyConfigEditor.Load(project.ConfigPath);
+		if (!editor.TrySetActiveStrategy(options.StrategyName, out var error))
+		{
+			stderr.WriteLine(error);
+			return 1;
+		}
+
+		File.WriteAllText(project.ConfigPath, editor.ToJson());
+		stdout.WriteLine($"Active strategy set to '{options.StrategyName}' for {project.ProjectName}.");
+		return 0;
+	}
+
+	private static int WriteAddStrategy(AiUnitReplOptions options, TextWriter stdout, TextWriter stderr)
+	{
+		if (string.IsNullOrWhiteSpace(options.StrategyName) || string.IsNullOrWhiteSpace(options.Target))
+		{
+			stderr.WriteLine("add-strategy requires <name> and --project <name>");
+			return 1;
+		}
+
+		var discovery = AiUnitWorkspaceDiscovery.Discover(WorkspaceDisplay(options.WorkspacePath));
+		var project = discovery.FindProject(options.Target);
+		if (project is null || project.ConfigPath is null)
+		{
+			stderr.WriteLine($"Project '{options.Target}' not found or has no config file.");
+			return 1;
+		}
+
+		var editor = AiUnitStrategyConfigEditor.Load(project.ConfigPath);
+		var def = new AiUnitStrategyDefinition(Kind: options.Kind ?? "openai-compatible");
+		if (!editor.TryAddOrUpdateStrategy(options.StrategyName, def, out var error))
+		{
+			stderr.WriteLine(error);
+			return 1;
+		}
+
+		File.WriteAllText(project.ConfigPath, editor.ToJson());
+		stdout.WriteLine($"Strategy '{options.StrategyName}' added/updated for {project.ProjectName}.");
+		return 0;
+	}
+
+	private static int WriteEditStrategy(AiUnitReplOptions options, TextWriter stdout, TextWriter stderr)
+	{
+		// edit uses same add-or-update
+		return WriteAddStrategy(options, stdout, stderr);
+	}
+
+	private static int WriteRemoveStrategy(AiUnitReplOptions options, TextWriter stdout, TextWriter stderr)
+	{
+		if (string.IsNullOrWhiteSpace(options.StrategyName) || string.IsNullOrWhiteSpace(options.Target))
+		{
+			stderr.WriteLine("remove-strategy requires <name> and --project <name>");
+			return 1;
+		}
+
+		var discovery = AiUnitWorkspaceDiscovery.Discover(WorkspaceDisplay(options.WorkspacePath));
+		var project = discovery.FindProject(options.Target);
+		if (project is null || project.ConfigPath is null)
+		{
+			stderr.WriteLine($"Project '{options.Target}' not found or has no config file.");
+			return 1;
+		}
+
+		var editor = AiUnitStrategyConfigEditor.Load(project.ConfigPath);
+		if (!editor.TryRemoveStrategy(options.StrategyName, out var error))
+		{
+			stderr.WriteLine(error);
+			return 1;
+		}
+
+		File.WriteAllText(project.ConfigPath, editor.ToJson());
+		stdout.WriteLine($"Strategy '{options.StrategyName}' removed from {project.ProjectName}.");
+		return 0;
+	}
+
+	private static int WriteExport(AiUnitReplOptions options, TextWriter stdout, TextWriter stderr)
+	{
+		var discovery = AiUnitWorkspaceDiscovery.Discover(WorkspaceDisplay(options.WorkspacePath));
+		if (!string.IsNullOrWhiteSpace(options.Target))
+		{
+			var project = discovery.FindProject(options.Target);
+			if (project?.ConfigPath != null)
+			{
+				var editor = AiUnitStrategyConfigEditor.Load(project.ConfigPath);
+				stdout.Write(editor.ToJson());
+				return 0;
+			}
+		}
+
+		stderr.WriteLine("export requires --project <name>.");
+		return 1;
+	}
 
 	private static string ResolveToolVersion()
 	{

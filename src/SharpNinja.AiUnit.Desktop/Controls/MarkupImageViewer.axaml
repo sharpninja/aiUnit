@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SharpNinja.AiUnit.Desktop.Controls.MarkupImageViewer"
+             Background="Transparent">
+  <!-- Use ScrollViewer for reliable content sizing and panning/scrolling when the image content is large.
+       The Image will always have a concrete size (natural or zoomed), so the bitmap will render.
+       Middle mouse panning is handled in code by adjusting the ScrollViewer offsets.
+       Wheel zoom changes the content size and adjusts offsets to keep the point under the mouse. -->
+  <ScrollViewer x:Name="ScrollViewer"
+                HorizontalScrollBarVisibility="Auto"
+                VerticalScrollBarVisibility="Auto"
+                Background="#1A1A1A">
+    <Grid x:Name="ContentGrid">
+      <Image x:Name="ImageElement"
+             Stretch="None" />
+      <Canvas x:Name="MarkupOverlay" />
+    </Grid>
+  </ScrollViewer>
+</UserControl>

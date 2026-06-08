@@ -2,4 +2,9 @@
 	<PropertyGroup>
 		<GitVersionTargetFramework>net10.0</GitVersionTargetFramework>
 	</PropertyGroup>
+	<ItemGroup>
+		<!-- GitVersion injected for all projects (semantic versioning, see GitVersion.yml for next-version etc.).
+		     PrivateAssets so it doesn't pollute consumer packages. -->
+		<PackageReference Include="GitVersion.MsBuild" Version="6.7.0" PrivateAssets="All" />
+	</ItemGroup>
 </Project>

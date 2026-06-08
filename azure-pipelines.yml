@@ -34,16 +34,8 @@ steps:
   - pwsh: dotnet --info
     displayName: Show .NET SDK info
 
-  - pwsh: dotnet restore .\SharpNinja.aiUnit.sln
-    displayName: Restore
-
-  - pwsh: >
-      dotnet test .\SharpNinja.aiUnit.sln
-      --configuration $(BuildConfiguration)
-      --no-restore
-      --logger trx
-      --results-directory "$(Agent.TempDirectory)\TestResults"
-    displayName: Test
+  - pwsh: ./build.ps1 --target Test --configuration $(BuildConfiguration)
+    displayName: Test (via Nuke)
 
   - task: PublishTestResults@2
     displayName: Publish test results
@@ -54,69 +46,25 @@ steps:
       failTaskOnFailedTests: true
 
   - pwsh: |
-      New-Item -ItemType Directory -Force -Path "$(NuGetPackageOutput)" | Out-Null
-      $packArgs = @(
-        'pack',
-        '.\SharpNinja.aiUnit.sln',
-        '--configuration',
-        '$(BuildConfiguration)',
-        '--no-restore',
-        '--output',
-        '$(NuGetPackageOutput)',
-        '/p:ContinuousIntegrationBuild=true'
-      )
+      $nukeArgs = @('--target', 'Pack', '--configuration', '$(BuildConfiguration)')
 
-      $sourceBranch = "$(Build.SourceBranch)"
-      if ($sourceBranch -match '^refs/tags/(?<tag>v?\d+\.\d+\.\d+)$') {
-        $releaseVersion = $Matches['tag'] -replace '^v', ''
-        $packArgs += @(
-          "/p:Version=$releaseVersion",
-          "/p:PackageVersion=$releaseVersion",
-          "/p:InformationalVersion=$releaseVersion"
-        )
+      # On stable version tags, pass explicit version to Nuke so it overrides
+      # for the final release artifacts (matches original pipeline behavior).
+      # GitVersion bumping is still honored for all normal builds and for the
+      # assembly/file/informational versions.
+      if ('$(Build.SourceBranch)' -match '^refs/tags/(v?\d+\.\d+\.\d+)$') {
+        $releaseVersion = $Matches[1] -replace '^v', ''
+        $nukeArgs += @('--version', $releaseVersion)
       }
 
-      dotnet @packArgs
-      if ($LASTEXITCODE -ne 0) {
-        throw "dotnet pack failed."
-      }
-    displayName: Pack NuGet packages
+      ./build.ps1 @nukeArgs
+    displayName: Pack NuGet packages (via Nuke)
 
   - pwsh: |
-      $toolPath = Join-Path "$(Agent.TempDirectory)" "aiunit-tool"
-      if (Test-Path -LiteralPath $toolPath) {
-        Remove-Item -LiteralPath $toolPath -Recurse -Force
-      }
-
-      $toolPackage = Get-ChildItem -Path "$(NuGetPackageOutput)" -Filter "SharpNinja.aiUnit.Tool.*.nupkg" |
-        Where-Object { $_.Name -notlike "*.snupkg" } |
-        Sort-Object Name |
-        Select-Object -Last 1
-      if (-not $toolPackage) {
-        throw "SharpNinja.aiUnit.Tool package was not produced."
-      }
-
-      $match = [regex]::Match($toolPackage.BaseName, '^SharpNinja\.aiUnit\.Tool\.(?<version>.+)$')
-      if (-not $match.Success) {
-        throw "Could not parse tool package version from $($toolPackage.Name)."
-      }
-
-      $version = $match.Groups['version'].Value
-      dotnet tool install SharpNinja.aiUnit.Tool --tool-path $toolPath --add-source "$(NuGetPackageOutput)" --version $version
-      if ($LASTEXITCODE -ne 0) {
-        throw "dotnet tool install failed for SharpNinja.aiUnit.Tool $version."
-      }
-
-      & (Join-Path $toolPath "aiunit.exe") --help
-      if ($LASTEXITCODE -ne 0) {
-        throw "Installed aiunit --help smoke test failed."
-      }
-
-      & (Join-Path $toolPath "aiunit.exe") --version
-      if ($LASTEXITCODE -ne 0) {
-        throw "Installed aiunit --version smoke test failed."
-      }
-    displayName: Smoke test packed aiunit tool
+      # Smoke test both tools individually via Nuke (they use their own temp directories internally)
+      ./build.ps1 --target SmokeTestAiunit --configuration $(BuildConfiguration)
+      ./build.ps1 --target SmokeTestAiunitReview --configuration $(BuildConfiguration)
+    displayName: Smoke test packed tools (via Nuke)
 
   - task: PublishPipelineArtifact@1
     displayName: Publish NuGet package artifact

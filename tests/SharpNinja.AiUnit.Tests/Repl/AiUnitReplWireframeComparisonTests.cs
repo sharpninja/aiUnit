@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using SharpNinja.AiUnit.Frontier;
+using SharpNinja.AiUnit.Scenarios;  // NEW: public core types for WireframeScenario / WireframeRequirement (per plan slice 0 + ACs)
 using SharpNinja.AiUnit.Xunit;
 using Xunit;
 using YamlDotNet.Core;
@@ -299,10 +300,10 @@ internal static class AiUnitReplWireframeComparisonScenarioCatalog
 
 	public static string RepositoryRoot => FindRepositoryRoot();
 
-	public static IReadOnlyList<AiUnitReplWireframeComparisonScenario> LoadAll() =>
+	public static IReadOnlyList<WireframeScenario> LoadAll() =>
 		ScenarioPaths.Select(Load).ToArray();
 
-	public static AiUnitReplWireframeComparisonScenario Load(string scenarioPath)
+	public static WireframeScenario Load(string scenarioPath)
 	{
 		var fullPath = ResolveRepositoryPath(scenarioPath);
 		if (!File.Exists(fullPath))
@@ -323,9 +324,9 @@ internal static class AiUnitReplWireframeComparisonScenarioCatalog
 		return Path.Combine(RepositoryRoot, path.Replace('/', Path.DirectorySeparatorChar));
 	}
 
-	private static AiUnitReplWireframeComparisonScenario LoadFromYaml(string yaml, string sourcePath)
+	private static WireframeScenario LoadFromYaml(string yaml, string sourcePath)
 	{
-		var scenario = Deserializer.Deserialize<AiUnitReplWireframeComparisonScenario>(yaml)
+		var scenario = Deserializer.Deserialize<WireframeScenario>(yaml)
 			?? throw new InvalidDataException($"Wireframe comparison scenario {sourcePath} did not deserialize.");
 		scenario.SourcePath = sourcePath;
 		scenario.RawYaml = yaml;
@@ -342,7 +343,7 @@ internal static class AiUnitReplWireframeComparisonScenarioCatalog
 		return scenario;
 	}
 
-	private static void Validate(AiUnitReplWireframeComparisonScenario scenario)
+	private static void Validate(WireframeScenario scenario)
 	{
 		RequireText(scenario.ScreenId, "screenId");
 		RequireText(scenario.Title, "title");
@@ -449,54 +450,10 @@ internal static class AiUnitReplWireframeComparisonScenarioCatalog
 	}
 }
 
-internal sealed class AiUnitReplWireframeComparisonScenario
-{
-	public string SourcePath { get; set; } = string.Empty;
-
-	public string RawYaml { get; set; } = string.Empty;
-
-	public string ModelPayloadYaml { get; set; } = string.Empty;
-
-	public string ScreenId { get; set; } = string.Empty;
-
-	public string WireframeBaselineVersion { get; set; } = string.Empty;
-
-	public string Title { get; set; } = string.Empty;
-
-	public string Prompt { get; set; } = string.Empty;
-
-	public List<RequirementReference> FunctionalRequirements { get; set; } = [];
-
-	public List<RequirementReference> TechnicalRequirements { get; set; } = [];
-
-	public string AgentsReadmeFirstPath { get; set; } = string.Empty;
-
-	public string AgentsReadmeFirstFullPath { get; set; } = string.Empty;
-
-	public string AgentsReadmeFirstContent { get; set; } = string.Empty;
-
-	public string ActualScreenshotPath { get; set; } = string.Empty;
-
-	public string ActualScreenshotFullPath { get; set; } = string.Empty;
-
-	public string WireframeScreenshotPath { get; set; } = string.Empty;
-
-	public string WireframeScreenshotFullPath { get; set; } = string.Empty;
-
-	public string WireframeSvgPath { get; set; } = string.Empty;
-
-	public string WireframeSvgFullPath { get; set; } = string.Empty;
-
-	[YamlMember(ScalarStyle = ScalarStyle.Literal)]
-	public string ResultSchema { get; set; } = string.Empty;
-}
-
-internal sealed class RequirementReference
-{
-	public string Id { get; set; } = string.Empty;
-
-	public string Text { get; set; } = string.Empty;
-}
+// NOTE: AiUnitReplWireframeComparisonScenario / RequirementReference moved to public core
+// SharpNinja.AiUnit.Scenarios.WireframeScenario / WireframeRequirement (plan slice 0, ACs from TEST-001/FR-001).
+// The test catalog below now uses the core types (deserial + full paths populated by LoadFromYaml).
+// Dupe removed to avoid maintenance; core shapes match the YAML + prior internal expectations.
 
 internal static class AiUnitReplWireframeComparisonPrompt
 {
@@ -531,7 +488,7 @@ internal static class AiUnitReplWireframeComparisonPrompt
 		""";
 	}
 
-	public static string BuildUserPrompt(AiUnitReplWireframeComparisonScenario scenario)
+	public static string BuildUserPrompt(WireframeScenario scenario)
 	{
 		return $"""
 		YAML screen comparison scenario file content:
@@ -547,7 +504,7 @@ internal static class AiUnitReplWireframeComparisonPrompt
 		""";
 	}
 
-	public static IReadOnlyList<FrontierAttachment> BuildAttachments(AiUnitReplWireframeComparisonScenario scenario) =>
+	public static IReadOnlyList<FrontierAttachment> BuildAttachments(WireframeScenario scenario) =>
 	[
 		new("image/png", Path.GetFileName(scenario.WireframeScreenshotFullPath), File.ReadAllBytes(scenario.WireframeScreenshotFullPath)),
 		new("image/png", Path.GetFileName(scenario.ActualScreenshotFullPath), File.ReadAllBytes(scenario.ActualScreenshotFullPath)),

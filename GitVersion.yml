@@ -1,12 +1,12 @@
 workflow: GitHubFlow/v1
-next-version: 0.11.0
+next-version: 0.9.0
 mode: ContinuousDelivery
 assembly-versioning-scheme: MajorMinorPatch
 assembly-file-versioning-scheme: MajorMinorPatch
 branches:
   main:
     label: beta
-    increment: None
+    increment: Patch   # Changed from None so that commits on main produce new pre-release versions (e.g. 0.11.0-beta.3, beta.4...). This makes "gitversion bumping" visible in package names, installed tool versions, and the UI label. Use tags for stable releases.
   pull-request:
     label: PullRequest{Number}
     increment: Inherit
