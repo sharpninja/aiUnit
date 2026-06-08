@@ -50,6 +50,12 @@
           <Button ToolTip.Tip="Arrow Markup (10px circle at head)" Margin="1" Padding="4,2" Click="ToolbarArrowClicked">
             <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7EA;" FontSize="14" />
           </Button>
+          <Button x:Name="UndoMarkupButton" ToolTip.Tip="Undo markup (Ctrl+Z)" Margin="1" Padding="4,2" Click="ToolbarUndoMarkupClicked" IsEnabled="False">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7A7;" FontSize="14" />
+          </Button>
+          <Button x:Name="RedoMarkupButton" ToolTip.Tip="Redo markup (Ctrl+Y)" Margin="1" Padding="4,2" Click="ToolbarRedoMarkupClicked" IsEnabled="False">
+            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7A6;" FontSize="14" />
+          </Button>
           <Button ToolTip.Tip="Clear all markups on active images" Margin="1" Padding="4,2" Click="ToolbarClearMarkupsClicked">
             <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE894;" FontSize="14" />
           </Button>

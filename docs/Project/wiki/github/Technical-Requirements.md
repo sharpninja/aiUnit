@@ -8,6 +8,10 @@
 
 **Azure Pipelines tagged NuGet publish workflow** — azure-pipelines.yml packs aiUnit to artifacts/nupkg, smoke-installs SharpNinja.aiUnit.Tool from the packed output, triggers on stable version tags, verifies package versions match the tag, rejects prerelease packages for full release publish, and pushes nupkg files to nuget.org with NuGetApiKey.
 
+## TR-AIUNIT-CI-002
+
+**Nuke build-number versioning and latest-package redeploy selection** — _build/Build.cs resolves an EffectiveBuildNumber from explicit BuildNumber, Azure DevOps/GitHub CI identifiers, or UTC timestamp; appends it to normal GitVersion package versions when Version is not explicitly supplied; disables GitVersion.MsBuild property overwrites during Nuke compile and pack; passes Version, PackageVersion, AssemblyVersion, FileVersion, and InformationalVersion consistently; packs after build so package binaries match package metadata; and selects redeploy packages by latest write time rather than filename sort so stale base packages cannot be reinstalled.
+
 ## TR-AIUNIT-CLI-001
 
 **CliFrontierClient uses IProcessRunner seam** — SendAsync delegates to an injected IProcessRunner so unit tests substitute a stub instead of spawning real binaries.
@@ -95,6 +99,10 @@
 ## TR-AIUNITDESKTOP-UI-001
 
 **MainWindow 3-column grid and scenario nav** — MainWindow axaml uses a Grid with RowDefinitions Auto-star-Auto and ColumnDefinitions star-Auto-2star-Auto-star with GridSplitters. Top nav ItemsControl binds ScenarioListViewModel Scenarios sorted by NumericPrefix with active scenario tagged Classes active. Wireframe panel renders SVG via Avalonia Svg Skia Svg. Screenshot panel uses Image with Stretch Uniform.
+
+## TR-AIUNITDESKTOP-UI-002
+
+**MarkupImageViewer synchronized view state and markup undo model** — MarkupImageViewer resolves its XAML parts before template timing differences, sizes content from stable viewer bounds for fit modes, publishes ViewState changes for wheel zoom, pointer pan, box zoom, toolbar fit and native ScrollViewer offset changes, clamps offsets with stable content and viewport dimensions, renders text markup as editable TextBox controls, and maintains per-viewer cloned markup snapshot undo and redo stacks. MainWindow mirrors active viewer state to the peer image pane and wires undo/redo toolbar buttons and Ctrl+Z/Ctrl+Y shortcuts outside text inputs.
 
 ## TR-AIUNITDESKTOP-UNDOCK-001
 

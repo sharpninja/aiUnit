@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Nuke.Common;
 using Nuke.Common.CI;
@@ -37,6 +39,9 @@ class Build : NukeBuild
     [Parameter("Optional explicit version to use for packaging (overrides GitVersion for release tags)")]
     readonly string Version;
 
+    [Parameter("Optional build number appended to normal GitVersion package versions; defaults to CI build id or UTC timestamp")]
+    readonly string BuildNumber;
+
     [Solution("SharpNinja.aiUnit.sln")] readonly Solution Solution;
     [GitRepository] readonly GitRepository GitRepository;
     [GitVersion] readonly GitVersion GitVersion;
@@ -58,12 +63,20 @@ class Build : NukeBuild
     // Local tool redeploy output (matches previous manual usage)
     AbsolutePath LocalToolSource => ArtifactsDirectory;
 
+    string _effectiveBuildNumber;
+    string _effectivePackageVersion;
+    string _effectiveInformationalVersion;
+
+    string EffectiveBuildNumber => _effectiveBuildNumber ??= ResolveBuildNumber();
+    string EffectivePackageVersion => _effectivePackageVersion ??= GetEffectiveVersion();
+    string EffectiveInformationalVersion => _effectiveInformationalVersion ??= CreateInformationalVersion(EffectivePackageVersion);
+
     Target Clean => _ => _
         .Before(Restore)
         .Executes(() =>
         {
-            SourceDirectory.GlobDirectories("**/bin", "**/obj").ForEach(DeleteDirectory);
-            TestsDirectory.GlobDirectories("**/bin", "**/obj").ForEach(DeleteDirectory);
+            SourceDirectory.GlobDirectories("**/bin", "**/obj").ForEach(d => d.DeleteDirectory());
+            TestsDirectory.GlobDirectories("**/bin", "**/obj").ForEach(d => d.DeleteDirectory());
             ArtifactsDirectory.CreateOrCleanDirectory();
         });
 
@@ -85,17 +98,20 @@ class Build : NukeBuild
                 .SetNoRestore(true)
                 .SetDeterministic(true)
                 .SetContinuousIntegrationBuild(IsServerBuild)
+                .SetProperty("DisableGitVersionTask", true)
+                .SetProperty("UpdateVersionProperties", false)
+                .SetProperty("UpdateAssemblyInfo", false)
+                .SetProperty("GenerateGitVersionInformation", false)
                 // Always honor GitVersion for assembly metadata on all built artifacts.
                 // This ensures the "bumping" (major/minor/patch/pre-release calculation per GitVersion.yml)
                 // is applied to DLLs, etc.
                 .SetAssemblyVersion(GitVersion.AssemblySemVer)
                 .SetFileVersion(GitVersion.AssemblySemFileVer)
-                .SetInformationalVersion(GitVersion.InformationalVersion)
-                // Only force a top-level Version override if explicitly provided (e.g. release tag from CI).
-                // Do NOT pass it unconditionally — that would skip GitVersion's version calculation/bumping
-                // for normal development and CI builds on main.
-                .When(!string.IsNullOrWhiteSpace(Version), _ => _
-                    .SetVersion(Version)));
+                .SetInformationalVersion(EffectiveInformationalVersion)
+                // Always set Version so assemblies, package metadata, and tool installs all agree.
+                // Normal builds get a unique build suffix; explicit --version remains exact.
+                .SetVersion(EffectivePackageVersion)
+                .SetProperty("PackageVersion", EffectivePackageVersion));
         });
 
     Target Test => _ => _
@@ -124,24 +140,22 @@ class Build : NukeBuild
                     .SetProject(AiunitReplProjectPath)
                     .SetConfiguration(Configuration)
                     .SetOutputDirectory(NuGetOutputDirectory)
-                    .SetNoBuild(true)
                     .SetNoRestore(true)
                     .SetProperty("ContinuousIntegrationBuild", IsServerBuild)
+                    .SetProperty("DisableGitVersionTask", true)
+                    .SetProperty("UpdateVersionProperties", false)
+                    .SetProperty("UpdateAssemblyInfo", false)
+                    .SetProperty("GenerateGitVersionInformation", false)
+                    .SetProperty("PackageVersion", EffectivePackageVersion)
                     .SetVerbosity(DotNetVerbosity.minimal);
 
                 // Always honor GitVersion semantic versions for the package metadata on artifacts.
                 s = s
                     .SetAssemblyVersion(GitVersion.AssemblySemVer)
                     .SetFileVersion(GitVersion.AssemblySemFileVer)
-                    .SetInformationalVersion(GitVersion.InformationalVersion);
+                    .SetInformationalVersion(EffectiveInformationalVersion);
 
-                // Always set the NuGet package version from GitVersion (unless an explicit --version
-                // override was passed for a stable tag release). This ensures the produced .nupkg
-                // filename and installed tool version always reflect the current GitVersion calculation
-                // (including any bumping from GitVersion.yml + commits). Previously the pack could
-                // produce the same "0.11.0-beta.2" nupkg name forever.
-                var pkgVer = !string.IsNullOrWhiteSpace(Version) ? Version : GitVersion.NuGetVersionV2;
-                s = s.SetVersion(pkgVer);
+                s = s.SetVersion(EffectivePackageVersion);
 
                 return s;
             });
@@ -158,18 +172,21 @@ class Build : NukeBuild
                     .SetProject(AiunitDesktopProjectPath)
                     .SetConfiguration(Configuration)
                     .SetOutputDirectory(NuGetOutputDirectory)
-                    .SetNoBuild(true)
                     .SetNoRestore(true)
                     .SetProperty("ContinuousIntegrationBuild", IsServerBuild)
+                    .SetProperty("DisableGitVersionTask", true)
+                    .SetProperty("UpdateVersionProperties", false)
+                    .SetProperty("UpdateAssemblyInfo", false)
+                    .SetProperty("GenerateGitVersionInformation", false)
+                    .SetProperty("PackageVersion", EffectivePackageVersion)
                     .SetVerbosity(DotNetVerbosity.minimal);
 
                 s = s
                     .SetAssemblyVersion(GitVersion.AssemblySemVer)
                     .SetFileVersion(GitVersion.AssemblySemFileVer)
-                    .SetInformationalVersion(GitVersion.InformationalVersion);
+                    .SetInformationalVersion(EffectiveInformationalVersion);
 
-                var pkgVer = !string.IsNullOrWhiteSpace(Version) ? Version : GitVersion.NuGetVersionV2;
-                s = s.SetVersion(pkgVer);
+                s = s.SetVersion(EffectivePackageVersion);
 
                 return s;
             });
@@ -186,18 +203,21 @@ class Build : NukeBuild
                     .SetProject(SourceDirectory / "SharpNinja.AiUnit" / "SharpNinja.AiUnit.csproj")
                     .SetConfiguration(Configuration)
                     .SetOutputDirectory(NuGetOutputDirectory)
-                    .SetNoBuild(true)
                     .SetNoRestore(true)
                     .SetProperty("ContinuousIntegrationBuild", IsServerBuild)
+                    .SetProperty("DisableGitVersionTask", true)
+                    .SetProperty("UpdateVersionProperties", false)
+                    .SetProperty("UpdateAssemblyInfo", false)
+                    .SetProperty("GenerateGitVersionInformation", false)
+                    .SetProperty("PackageVersion", EffectivePackageVersion)
                     .SetVerbosity(DotNetVerbosity.minimal);
 
                 s = s
                     .SetAssemblyVersion(GitVersion.AssemblySemVer)
                     .SetFileVersion(GitVersion.AssemblySemFileVer)
-                    .SetInformationalVersion(GitVersion.InformationalVersion);
+                    .SetInformationalVersion(EffectiveInformationalVersion);
 
-                var pkgVer = !string.IsNullOrWhiteSpace(Version) ? Version : GitVersion.NuGetVersionV2;
-                s = s.SetVersion(pkgVer);
+                s = s.SetVersion(EffectivePackageVersion);
 
                 return s;
             });
@@ -267,7 +287,10 @@ class Build : NukeBuild
             if (nupkgs.Count == 0)
                 throw new Exception($"No {AiunitReviewToolPackageId} package found for smoke test.");
 
-            var nupkg = nupkgs.OrderByDescending(x => x.Name).First();
+            var nupkg = nupkgs
+                .OrderByDescending(x => File.GetLastWriteTimeUtc(x))
+                .ThenByDescending(x => x.Name)
+                .First();
             var match = System.Text.RegularExpressions.Regex.Match(nupkg.NameWithoutExtension, $@"^{System.Text.RegularExpressions.Regex.Escape(AiunitReviewToolPackageId)}\.(?<version>.+)$");
             if (!match.Success)
                 throw new Exception($"Could not parse version from {nupkg.Name}");
@@ -277,7 +300,7 @@ class Build : NukeBuild
             DotNetTasks.DotNet($"tool install {AiunitReviewToolPackageId} --tool-path \"{toolPath}\" --add-source \"{NuGetOutputDirectory}\" --version {version}");
 
             // The Desktop tool supports --probe-exit for headless/CI validation (returns 0 without showing UI)
-            Logger.Info("Running probe-exit smoke test for aiunit-review...");
+            Serilog.Log.Information("Running probe-exit smoke test for aiunit-review...");
             var probeExe = toolPath / "aiunit-review.exe";
             if (!File.Exists(probeExe))
                 probeExe = toolPath / "aiunit-review";
@@ -297,7 +320,10 @@ class Build : NukeBuild
         if (nupkgs.Count == 0)
             throw new Exception($"No {packageId} package found for smoke test.");
 
-        var nupkg = nupkgs.OrderByDescending(x => x.Name).First();
+        var nupkg = nupkgs
+            .OrderByDescending(x => File.GetLastWriteTimeUtc(x))
+            .ThenByDescending(x => x.Name)
+            .First();
         var match = System.Text.RegularExpressions.Regex.Match(nupkg.NameWithoutExtension, $@"^{System.Text.RegularExpressions.Regex.Escape(packageId)}\.(?<version>.+)$");
         if (!match.Success)
             throw new Exception($"Could not parse version from {nupkg.Name}");
@@ -310,7 +336,7 @@ class Build : NukeBuild
         if (!File.Exists(exe))
             exe = toolPath / commandName; // fallback for some installs
 
-        Logger.Info($"Running smoke tests for {commandName} v{version}...");
+        Serilog.Log.Information($"Running smoke tests for {commandName} v{version}...");
 
         // --help
         var helpResult = ProcessTasks.StartProcess(exe, "--help", logInvocation: false, logOutput: true).AssertWaitForExit();
@@ -323,19 +349,79 @@ class Build : NukeBuild
             throw new Exception($"Installed {commandName} --version smoke test failed.");
     }
 
-    // Helper kept for potential future use / logging.
     // Version selection logic:
-    // - If explicit --version parameter is passed (from CI on stable tags), use it for package Version/PackageVersion.
-    // - Otherwise, do NOT force it — this lets GitVersion.MsBuild (injected by Directory.Build.props
-    //   for all src projects) perform its normal "bumping" (calculating the version per GitVersion.yml,
-    //   current branch, commits, etc.) so that GitVersion is fully honored on all artifacts (nupkgs,
-    //   assemblies, symbols, etc.).
+    // - If explicit --version is passed (release tag/manual override), use it exactly.
+    // - Otherwise, append a build number to GitVersion's package version as a prerelease identifier
+    //   so every local/CI build produces a distinct NuGet package/tool version. Build metadata
+    //   (`+...`) is not enough because NuGet normalizes package identity without it.
     string GetEffectiveVersion()
     {
         if (!string.IsNullOrWhiteSpace(Version))
             return Version;
 
-        return GitVersion.NuGetVersionV2;
+        var baseVersion = FirstNonEmpty(
+            GitVersion.NuGetVersionV2,
+            GitVersion.FullSemVer,
+            GitVersion.SemVer,
+            GitVersion.MajorMinorPatch);
+
+        if (string.IsNullOrWhiteSpace(baseVersion))
+            throw new InvalidOperationException("GitVersion did not produce a usable package version.");
+
+        return AppendBuildNumberToNuGetVersion(baseVersion, EffectiveBuildNumber);
+    }
+
+    string CreateInformationalVersion(string packageVersion)
+    {
+        var info = GitVersion.InformationalVersion ?? string.Empty;
+        var plus = info.IndexOf('+');
+        if (plus >= 0 && plus < info.Length - 1)
+            return $"{packageVersion}+{info.Substring(plus + 1)}";
+
+        return packageVersion;
+    }
+
+    string ResolveBuildNumber()
+    {
+        if (!string.IsNullOrWhiteSpace(BuildNumber))
+            return SanitizeBuildNumber(BuildNumber);
+
+        var ciBuildNumber = new[]
+        {
+            Environment.GetEnvironmentVariable("BUILD_BUILDID"),
+            Environment.GetEnvironmentVariable("BUILD_BUILDNUMBER"),
+            Environment.GetEnvironmentVariable("GITHUB_RUN_NUMBER"),
+            Environment.GetEnvironmentVariable("GITHUB_RUN_ID")
+        }.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
+        if (!string.IsNullOrWhiteSpace(ciBuildNumber))
+            return SanitizeBuildNumber(ciBuildNumber);
+
+        return DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+    }
+
+    static string AppendBuildNumberToNuGetVersion(string baseVersion, string buildNumber)
+    {
+        if (string.IsNullOrWhiteSpace(buildNumber))
+            return baseVersion;
+
+        var suffix = $"build.{buildNumber}";
+        return baseVersion.Contains('-')
+            ? $"{baseVersion}.{suffix}"
+            : $"{baseVersion}-{suffix}";
+    }
+
+    static string FirstNonEmpty(params string[] values)
+    {
+        return values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+    }
+
+    static string SanitizeBuildNumber(string value)
+    {
+        var sanitized = Regex.Replace(value.Trim(), @"[^0-9A-Za-z-]+", "-").Trim('-');
+        return !string.IsNullOrWhiteSpace(sanitized)
+            ? sanitized
+            : DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
     }
 
     void RedeployTool(string packageId, string commandName, string nupkgGlob)
@@ -345,7 +431,10 @@ class Build : NukeBuild
         if (nupkgs.Count == 0)
             throw new Exception($"No package matching {nupkgGlob} found in {NuGetOutputDirectory}");
 
-        var nupkg = nupkgs.OrderByDescending(f => f.Name).First();
+        var nupkg = nupkgs
+            .OrderByDescending(x => File.GetLastWriteTimeUtc(x))
+            .ThenByDescending(x => x.Name)
+            .First();
         var fileName = Path.GetFileNameWithoutExtension(nupkg.Name);
         // Expected format: PackageId.Version
         var versionPart = fileName.Substring(packageId.Length + 1);
@@ -371,33 +460,38 @@ class Build : NukeBuild
         //    This must happen before we touch the .store folder.
         ForceKillToolProcesses(commandName, packageId);
 
-        // 2. Aggressively remove the exact versioned store directory that dotnet tool uses.
-        //    On Windows the files inside are frequently locked by the previous process or the shim host.
+        // 2. Aggressively remove the entire package store directory (all versions) to ensure a clean
+        //    install of the new version. Old versions' files can remain locked or cause the shim
+        //    to resolve to stale bits even after `dotnet tool install` of a newer version.
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var storeDir = (AbsolutePath)Path.Combine(userProfile, ".dotnet", "tools", ".store",
-            packageId.ToLowerInvariant(), versionPart);
+        var packageStoreDir = (AbsolutePath)Path.Combine(userProfile, ".dotnet", "tools", ".store",
+            packageId.ToLowerInvariant());
 
-        if (Directory.Exists(storeDir))
+        if (Directory.Exists(packageStoreDir))
         {
             for (int attempt = 0; attempt < 5; attempt++)
             {
                 try
                 {
-                    storeDir.DeleteDirectory();
-                    Serilog.Log.Information($"Deleted global tool store: {storeDir}");
+                    packageStoreDir.DeleteDirectory();
+                    Serilog.Log.Information($"Deleted entire global tool store for clean redeploy: {packageStoreDir}");
                     break;
                 }
                 catch (Exception ex)
                 {
                     if (attempt == 4)
-                        Serilog.Log.Warning($"Could not fully delete {storeDir} after kills: {ex.Message}. Continuing with uninstall+install.");
+                        Serilog.Log.Warning($"Could not fully delete {packageStoreDir} after kills: {ex.Message}. Continuing with uninstall+install.");
                     else
                         Thread.Sleep(400);
                 }
             }
         }
 
-        // 3. Remove the shims in ~/.dotnet/tools (the things that end up on PATH).
+        // Aggressively remove any shims that might be left behind (helps when the
+        // previous version's shim is still being resolved by the current shell/PATH).
+        // We delete the whole package store first (above), then clean the shims so the
+        // next `aiunit-review` (or `aiunit`) invocation definitely gets the freshly
+        // installed bits.
         var toolsDir = (AbsolutePath)Path.Combine(userProfile, ".dotnet", "tools");
         var shimNames = new[] { commandName, commandName + ".exe", commandName + ".pdb" };
         foreach (var name in shimNames)
@@ -409,7 +503,7 @@ class Build : NukeBuild
             }
         }
 
-        // 4. Uninstall (best effort - the store delete + kill above usually makes this succeed).
+        // 3. Uninstall (best effort - the store delete + kill + shim cleanup above usually makes this succeed).
         try
         {
             DotNetTasks.DotNet($"tool uninstall {packageId} --global");
@@ -419,7 +513,7 @@ class Build : NukeBuild
             // Expected to sometimes fail if the tool wasn't registered or files were already removed.
         }
 
-        // 5. Install the exact version we just built from the local artifacts feed.
+        // 4. Install the exact version we just built from the local artifacts feed.
         DotNetTasks.DotNet($"tool install {packageId} --global --add-source \"{NuGetOutputDirectory}\" --version {versionPart}");
 
         Serilog.Log.Information($"Global redeploy of {commandName} complete (version {versionPart}).");

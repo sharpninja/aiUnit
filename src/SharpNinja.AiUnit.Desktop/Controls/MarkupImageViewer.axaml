@@ -10,10 +10,16 @@
                 HorizontalScrollBarVisibility="Auto"
                 VerticalScrollBarVisibility="Auto"
                 Background="#1A1A1A">
-    <Grid x:Name="ContentGrid">
+    <Grid x:Name="ContentGrid"
+          HorizontalAlignment="Left"
+          VerticalAlignment="Top">
       <Image x:Name="ImageElement"
-             Stretch="None" />
-      <Canvas x:Name="MarkupOverlay" />
+             Stretch="None"
+             HorizontalAlignment="Left"
+             VerticalAlignment="Top" />
+      <Canvas x:Name="MarkupOverlay"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top" />
     </Grid>
   </ScrollViewer>
 </UserControl>

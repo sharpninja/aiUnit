@@ -111,6 +111,10 @@
   "allOf": [
     {
       "properties": {
+        "BuildNumber": {
+          "type": "string",
+          "description": "Optional build number appended to normal GitVersion package versions; defaults to CI build id or UTC timestamp"
+        },
         "Configuration": {
           "type": "string",
           "description": "Configuration to build"

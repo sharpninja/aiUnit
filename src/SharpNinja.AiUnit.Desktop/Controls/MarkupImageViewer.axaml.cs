@@ -28,6 +28,13 @@ public partial class MarkupImageViewer : UserControl
     private Grid? _contentGrid;
     private Image? _imageElement;
     private Canvas? _markupOverlay;
+    private bool _sizeHandlersAttached;
+    private bool _scrollOffsetHandlerAttached;
+    private bool _suppressViewChanged;
+    private bool _restoringMarkupHistory;
+    private bool _suppressMarkupCollectionRedraw;
+    private readonly Stack<List<ImageMarkup>> _undoHistory = new();
+    private readonly Stack<List<ImageMarkup>> _redoHistory = new();
 
     private double _zoom = 1.0;
 
@@ -62,6 +69,14 @@ public partial class MarkupImageViewer : UserControl
     /// </summary>
     public event Action<MarkupImageViewer>? Activated;
 
+    public readonly record struct ViewState(double Zoom, Vector Offset);
+
+    public event Action<MarkupImageViewer, ViewState>? ViewChanged;
+    public event Action<MarkupImageViewer>? MarkupHistoryChanged;
+
+    public bool CanUndoMarkup => _undoHistory.Count > 0;
+    public bool CanRedoMarkup => _redoHistory.Count > 0;
+
     public enum Tool
     {
         Pan,
@@ -86,8 +101,9 @@ public partial class MarkupImageViewer : UserControl
     public MarkupImageViewer()
     {
         InitializeComponent();
+        ResolveParts();
 
-        // Find named parts after template is applied
+        // Keep this as a fallback for template/name-scope timing differences.
         TemplateApplied += OnTemplateApplied;
 
         // Pointer events (we use AddHandler for wheel to get it even when not focused)
@@ -98,7 +114,11 @@ public partial class MarkupImageViewer : UserControl
         PointerExited += (_, __) => CancelTemporaryVisuals();
 
         // Redraw markups when collection changes
-        Markups.CollectionChanged += (_, __) => RedrawMarkups();
+        Markups.CollectionChanged += (_, __) =>
+        {
+            if (!_suppressMarkupCollectionRedraw)
+                RedrawMarkups();
+        };
 
         // When source changes, reset zoom/pan and layout the content to native pixel size
         SourceProperty.Changed.AddClassHandler<MarkupImageViewer>((s, e) => s.OnSourceChanged());
@@ -120,24 +140,36 @@ public partial class MarkupImageViewer : UserControl
 
     private void OnTemplateApplied(object? sender, TemplateAppliedEventArgs e)
     {
-        _scrollViewer = e.NameScope.Find<ScrollViewer>("ScrollViewer");
-        _contentGrid = e.NameScope.Find<Grid>("ContentGrid");
-        _imageElement = e.NameScope.Find<Image>("ImageElement");
-        _markupOverlay = e.NameScope.Find<Canvas>("MarkupOverlay");
+        ResolveParts(e);
 
         UpdateCursor();
+    }
+
+    private void ResolveParts(TemplateAppliedEventArgs? e = null)
+    {
+        _scrollViewer ??= e?.NameScope.Find<ScrollViewer>("ScrollViewer")
+            ?? this.FindControl<ScrollViewer>("ScrollViewer");
+        _contentGrid ??= e?.NameScope.Find<Grid>("ContentGrid")
+            ?? this.FindControl<Grid>("ContentGrid");
+        _imageElement ??= e?.NameScope.Find<Image>("ImageElement")
+            ?? this.FindControl<Image>("ImageElement");
+        _markupOverlay ??= e?.NameScope.Find<Canvas>("MarkupOverlay")
+            ?? this.FindControl<Canvas>("MarkupOverlay");
 
         // Hook size changes so we can re-apply base scale (Fit etc.) once the ScrollViewer
         // reports a real viewport after being placed into the final ContentGrid/leftStack layout.
-        if (_scrollViewer != null)
+        if (!_sizeHandlersAttached && _scrollViewer != null)
         {
             _scrollViewer.SizeChanged += OnViewportSizeChanged;
+            this.SizeChanged += OnViewerSizeChanged;
+            _sizeHandlersAttached = true;
         }
 
-        // Also listen to our own size changes so base scale (Fit etc.) can re-pin the content box
-        // to the actual allocated panel size whenever the outer layout (leftStack rows, splitters, window)
-        // gives us a new size.
-        this.SizeChanged += OnViewerSizeChanged;
+        if (!_scrollOffsetHandlerAttached && _scrollViewer != null)
+        {
+            _scrollViewer.PropertyChanged += OnScrollViewerPropertyChanged;
+            _scrollOffsetHandlerAttached = true;
+        }
 
         // If Source was set before the template was realized, apply it now.
         if (Source != null)
@@ -163,6 +195,23 @@ public partial class MarkupImageViewer : UserControl
         }
     }
 
+    private void OnScrollViewerPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == ScrollViewer.OffsetProperty)
+        {
+            OnScrollViewerOffsetChanged();
+        }
+    }
+
+    private void OnScrollViewerOffsetChanged()
+    {
+        if (_suppressViewChanged || _scrollViewer == null || Source == null) return;
+
+        Activated?.Invoke(this);
+        _lastBaseStretch = null;
+        NotifyViewChanged();
+    }
+
     private void OnSourceChanged()
     {
         if (_imageElement == null) return;
@@ -176,6 +225,7 @@ public partial class MarkupImageViewer : UserControl
         // The Viewport-driven content sizing in the fit path will make the scaled image visible
         // in the panel without the Viewport "covering" empty space in a large mismatched canvas.
 
+        ClearMarkupHistory();
         Markups.Clear();
 
         // If a base stretch was already requested before this source arrived (or on reparent),
@@ -218,22 +268,7 @@ public partial class MarkupImageViewer : UserControl
 
         double oldZoom = _zoom;
         double factor = e.Delta.Y > 0 ? 1.2 : 1.0 / 1.2;
-        _zoom = Math.Clamp(_zoom * factor, 0.05, 32.0);
-
-        // Update the content size for the new zoom (this scales the bitmap visually)
-        double naturalW = Source.PixelSize.Width;
-        double naturalH = Source.PixelSize.Height;
-        double newDisplayW = naturalW * _zoom;
-        double newDisplayH = naturalH * _zoom;
-
-        _contentGrid.Width = newDisplayW;
-        _contentGrid.Height = newDisplayH;
-
-        _markupOverlay!.Width = newDisplayW;
-        _markupOverlay!.Height = newDisplayH;
-
-        _imageElement!.Width = newDisplayW;
-        _imageElement!.Height = newDisplayH;
+        ApplyInteractiveZoom(_zoom * factor);
 
         // Adjust scroll offsets so the point under the mouse stays under the mouse after the size change.
         // This gives "centered zoom" feel.
@@ -245,7 +280,8 @@ public partial class MarkupImageViewer : UserControl
         double newOffsetX = mousePos.X + (offsetX - mousePos.X) * scaleChange;
         double newOffsetY = mousePos.Y + (offsetY - mousePos.Y) * scaleChange;
 
-        _scrollViewer.Offset = new Vector(newOffsetX, newOffsetY);
+        SetScrollOffset(new Vector(newOffsetX, newOffsetY), refreshLayout: true);
+        NotifyViewChanged();
 
         e.Handled = true;
     }
@@ -253,6 +289,7 @@ public partial class MarkupImageViewer : UserControl
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_scrollViewer == null) return;
+        if (IsTextInputEventSource(e.Source)) return;
 
         Activated?.Invoke(this);
 
@@ -332,13 +369,16 @@ public partial class MarkupImageViewer : UserControl
         if (e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed ||
             (_currentTool == Tool.Pan && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed))
         {
+            _lastBaseStretch = null;
+
             // Panning via ScrollViewer offsets (reliable, image always visible)
             var delta = current - _lastPointerPosition;
             var newOffset = new Vector(
                 _scrollViewer!.Offset.X - delta.X,
                 _scrollViewer!.Offset.Y - delta.Y
             );
-            _scrollViewer.Offset = newOffset;
+            SetScrollOffset(newOffset);
+            NotifyViewChanged();
         }
         else if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
         {
@@ -402,6 +442,7 @@ public partial class MarkupImageViewer : UserControl
             {
                 _lastBaseStretch = null;
                 ZoomToRect(rect);
+                NotifyViewChanged();
             }
         }
         else if (_currentTool == Tool.Highlighter)
@@ -429,7 +470,7 @@ public partial class MarkupImageViewer : UserControl
 
             if (rect.Width > 10 && rect.Height > 10)
             {
-                AddTextArea(rect, "Note"); // Default text; user can imagine editing later or we can enhance
+                AddTextArea(rect, "Note");
             }
         }
         else if (_currentTool == Tool.Arrow)
@@ -474,32 +515,13 @@ public partial class MarkupImageViewer : UserControl
         // The rect is in original pixel space. We want to set zoom so that the rect fills the view.
         double scaleX = viewW / imageRect.Width;
         double scaleY = viewH / imageRect.Height;
-        _zoom = Math.Clamp(Math.Min(scaleX, scaleY), 0.05, 32.0);
-
-        double displayW = naturalW * _zoom;
-        double displayH = naturalH * _zoom;
-
-        if (_contentGrid != null)
-        {
-            _contentGrid.Width = displayW;
-            _contentGrid.Height = displayH;
-        }
-        if (_markupOverlay != null)
-        {
-            _markupOverlay.Width = displayW;
-            _markupOverlay.Height = displayH;
-        }
-        if (_imageElement != null)
-        {
-            _imageElement.Width = displayW;
-            _imageElement.Height = displayH;
-        }
+        ApplyInteractiveZoom(Math.Clamp(Math.Min(scaleX, scaleY), 0.05, 32.0));
 
         // Position so the selected rect is at the top-left of the view (or centered; top-left is simple and useful for "zoom to area").
         double offsetX = imageRect.X * _zoom;
         double offsetY = imageRect.Y * _zoom;
 
-        _scrollViewer.Offset = new Vector(offsetX, offsetY);
+        SetScrollOffset(new Vector(offsetX, offsetY), refreshLayout: true);
     }
 
     public void ResetView(bool fit = false)
@@ -508,7 +530,7 @@ public partial class MarkupImageViewer : UserControl
         {
             _zoom = 1.0;
             if (_scrollViewer != null)
-                _scrollViewer.Offset = new Vector(0, 0);
+                SetScrollOffset(new Vector(0, 0));
             return;
         }
 
@@ -554,7 +576,7 @@ public partial class MarkupImageViewer : UserControl
                 _markupOverlay.Height = viewH;
             }
 
-            _scrollViewer.Offset = new Vector(0, 0);
+            SetScrollOffset(new Vector(0, 0));
         }
         else
         {
@@ -580,7 +602,7 @@ public partial class MarkupImageViewer : UserControl
                 _imageElement.Stretch = Stretch.None;  // True 1:1
             }
 
-            _scrollViewer.Offset = new Vector(0, 0);
+            SetScrollOffset(new Vector(0, 0));
         }
     }
 
@@ -588,6 +610,7 @@ public partial class MarkupImageViewer : UserControl
 
     private void AddHighlighter(Rect imageRect)
     {
+        PushMarkupUndoState();
         var markup = new ImageMarkup
         {
             Type = MarkupType.Highlighter,
@@ -599,6 +622,7 @@ public partial class MarkupImageViewer : UserControl
 
     private void AddTextArea(Rect imageRect, string text)
     {
+        PushMarkupUndoState();
         var markup = new ImageMarkup
         {
             Type = MarkupType.TextArea,
@@ -606,11 +630,12 @@ public partial class MarkupImageViewer : UserControl
             Text = text
         };
         Markups.Add(markup);
-        RedrawMarkups();
+        RedrawMarkups(markup);
     }
 
     private void AddArrow(Point start, Point end)
     {
+        PushMarkupUndoState();
         var markup = new ImageMarkup
         {
             Type = MarkupType.Arrow,
@@ -622,7 +647,7 @@ public partial class MarkupImageViewer : UserControl
         RedrawMarkups();
     }
 
-    private void RedrawMarkups()
+    private void RedrawMarkups(ImageMarkup? focusTextMarkup = null)
     {
         if (_markupOverlay == null || Source == null) return;
 
@@ -666,17 +691,48 @@ public partial class MarkupImageViewer : UserControl
                         Canvas.SetTop(rect, m.Bounds.Y * s);
                         _markupOverlay.Children.Add(rect);
 
-                        var tb = new TextBlock
+                        var tb = new TextBox
                         {
-                            Text = m.Text ?? "Text area",
+                            Text = m.Text ?? string.Empty,
+                            AcceptsReturn = true,
+                            TextWrapping = TextWrapping.Wrap,
                             Foreground = Brushes.White,
                             FontSize = 11,
                             FontWeight = FontWeight.SemiBold,
-                            Margin = new Thickness(4, 2, 4, 2)
+                            Background = new SolidColorBrush(Color.FromArgb(95, 10, 22, 34)),
+                            BorderBrush = Brushes.DeepSkyBlue,
+                            BorderThickness = new Thickness(1),
+                            Padding = new Thickness(4, 2, 4, 2),
+                            Width = Math.Max(28, m.Bounds.Width * s - 4),
+                            Height = Math.Max(24, m.Bounds.Height * s - 4),
+                            MinWidth = 28,
+                            MinHeight = 24
+                        };
+                        var textUndoCaptured = false;
+                        tb.TextChanged += (_, __) =>
+                        {
+                            if (!textUndoCaptured)
+                            {
+                                PushMarkupUndoState();
+                                textUndoCaptured = true;
+                            }
+
+                            m.Text = tb.Text ?? string.Empty;
+                        };
+                        tb.PointerPressed += (_, args) =>
+                        {
+                            Activated?.Invoke(this);
+                            _isDragging = false;
+                            args.Handled = true;
                         };
                         Canvas.SetLeft(tb, m.Bounds.X * s + 2);
                         Canvas.SetTop(tb, m.Bounds.Y * s + 2);
                         _markupOverlay.Children.Add(tb);
+
+                        if (ReferenceEquals(m, focusTextMarkup))
+                        {
+                            FocusTextArea(tb);
+                        }
                     }
                     break;
 
@@ -745,6 +801,29 @@ public partial class MarkupImageViewer : UserControl
         _tempShape = null;
     }
 
+    private static bool IsTextInputEventSource(object? source)
+    {
+        var current = source as Control;
+        while (current != null)
+        {
+            if (current is TextBox)
+                return true;
+
+            current = current.Parent as Control;
+        }
+
+        return false;
+    }
+
+    private static void FocusTextArea(TextBox textBox)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            textBox.Focus();
+            textBox.SelectAll();
+        }, DispatcherPriority.Background);
+    }
+
     // Public helpers for toolbar
     public void ZoomIn()
     {
@@ -753,29 +832,7 @@ public partial class MarkupImageViewer : UserControl
         _lastBaseStretch = null; // user-controlled zoom
 
         double oldZoom = _zoom;
-        _zoom = Math.Min(_zoom * 1.25, 32.0);
-
-        double naturalW = Source.PixelSize.Width;
-        double naturalH = Source.PixelSize.Height;
-
-        double newDisplayW = naturalW * _zoom;
-        double newDisplayH = naturalH * _zoom;
-
-        if (_contentGrid != null)
-        {
-            _contentGrid.Width = newDisplayW;
-            _contentGrid.Height = newDisplayH;
-        }
-        if (_markupOverlay != null)
-        {
-            _markupOverlay.Width = newDisplayW;
-            _markupOverlay.Height = newDisplayH;
-        }
-        if (_imageElement != null)
-        {
-            _imageElement.Width = newDisplayW;
-            _imageElement.Height = newDisplayH;
-        }
+        ApplyInteractiveZoom(_zoom * 1.25);
 
         // Rough center preservation (good enough for toolbar button)
         double cx = _scrollViewer.Offset.X + _scrollViewer.Viewport.Width / 2;
@@ -784,10 +841,11 @@ public partial class MarkupImageViewer : UserControl
         double newCx = cx * (_zoom / oldZoom);
         double newCy = cy * (_zoom / oldZoom);
 
-        _scrollViewer.Offset = new Vector(
+        SetScrollOffset(new Vector(
             Math.Max(0, newCx - _scrollViewer.Viewport.Width / 2),
             Math.Max(0, newCy - _scrollViewer.Viewport.Height / 2)
-        );
+        ), refreshLayout: true);
+        NotifyViewChanged();
     }
 
     public void ZoomOut()
@@ -797,29 +855,7 @@ public partial class MarkupImageViewer : UserControl
         _lastBaseStretch = null; // user-controlled zoom
 
         double oldZoom = _zoom;
-        _zoom = Math.Max(_zoom / 1.25, 0.05);
-
-        double naturalW = Source.PixelSize.Width;
-        double naturalH = Source.PixelSize.Height;
-
-        double newDisplayW = naturalW * _zoom;
-        double newDisplayH = naturalH * _zoom;
-
-        if (_contentGrid != null)
-        {
-            _contentGrid.Width = newDisplayW;
-            _contentGrid.Height = newDisplayH;
-        }
-        if (_markupOverlay != null)
-        {
-            _markupOverlay.Width = newDisplayW;
-            _markupOverlay.Height = newDisplayH;
-        }
-        if (_imageElement != null)
-        {
-            _imageElement.Width = newDisplayW;
-            _imageElement.Height = newDisplayH;
-        }
+        ApplyInteractiveZoom(_zoom / 1.25);
 
         double cx = _scrollViewer.Offset.X + _scrollViewer.Viewport.Width / 2;
         double cy = _scrollViewer.Offset.Y + _scrollViewer.Viewport.Height / 2;
@@ -827,15 +863,161 @@ public partial class MarkupImageViewer : UserControl
         double newCx = cx * (_zoom / oldZoom);
         double newCy = cy * (_zoom / oldZoom);
 
-        _scrollViewer.Offset = new Vector(
+        SetScrollOffset(new Vector(
             Math.Max(0, newCx - _scrollViewer.Viewport.Width / 2),
             Math.Max(0, newCy - _scrollViewer.Viewport.Height / 2)
-        );
+        ), refreshLayout: true);
+        NotifyViewChanged();
     }
 
     public void FitToView()
     {
         ResetView(fit: true);
+        NotifyViewChanged();
+    }
+
+    public void ApplyViewState(ViewState state)
+    {
+        if (_scrollViewer == null || Source == null) return;
+
+        _lastBaseStretch = null;
+        ApplyInteractiveZoom(state.Zoom);
+        SetScrollOffset(state.Offset, refreshLayout: true);
+    }
+
+    internal ViewState CaptureViewStateForTest()
+    {
+        ResolveParts();
+        return CaptureViewState();
+    }
+
+    private ViewState CaptureViewState() => new(_zoom, _scrollViewer?.Offset ?? default);
+
+    private void NotifyViewChanged()
+    {
+        if (_scrollViewer == null || Source == null) return;
+        ViewChanged?.Invoke(this, CaptureViewState());
+    }
+
+    private void ApplyInteractiveZoom(double zoom)
+    {
+        if (Source == null) return;
+
+        _zoom = Math.Clamp(zoom, 0.05, 32.0);
+
+        double displayW = Source.PixelSize.Width * _zoom;
+        double displayH = Source.PixelSize.Height * _zoom;
+
+        if (_contentGrid != null)
+        {
+            _contentGrid.Width = displayW;
+            _contentGrid.Height = displayH;
+        }
+        if (_markupOverlay != null)
+        {
+            _markupOverlay.Width = displayW;
+            _markupOverlay.Height = displayH;
+        }
+        if (_imageElement != null)
+        {
+            _imageElement.Width = displayW;
+            _imageElement.Height = displayH;
+            _imageElement.Stretch = Stretch.Fill;
+        }
+
+        RedrawMarkups();
+        _imageElement?.InvalidateMeasure();
+        _imageElement?.InvalidateArrange();
+        _imageElement?.InvalidateVisual();
+        _contentGrid?.InvalidateMeasure();
+        _contentGrid?.InvalidateArrange();
+        _contentGrid?.InvalidateVisual();
+        _markupOverlay?.InvalidateVisual();
+        _scrollViewer?.InvalidateArrange();
+        _scrollViewer?.InvalidateVisual();
+    }
+
+    private void SetScrollOffset(Vector requested, bool refreshLayout = false)
+    {
+        if (_scrollViewer == null) return;
+
+        if (refreshLayout)
+            RefreshScrollLayoutForOffset();
+
+        _suppressViewChanged = true;
+        try
+        {
+            _scrollViewer.Offset = ClampScrollOffset(requested);
+        }
+        finally
+        {
+            _suppressViewChanged = false;
+        }
+    }
+
+    private void RefreshScrollLayoutForOffset()
+    {
+        _contentGrid?.InvalidateMeasure();
+        _contentGrid?.InvalidateArrange();
+        _imageElement?.InvalidateMeasure();
+        _imageElement?.InvalidateArrange();
+        _markupOverlay?.InvalidateMeasure();
+        _markupOverlay?.InvalidateArrange();
+        _scrollViewer?.InvalidateMeasure();
+        _scrollViewer?.InvalidateArrange();
+        _scrollViewer?.UpdateLayout();
+    }
+
+    private Vector ClampScrollOffset(Vector requested)
+    {
+        if (_scrollViewer == null) return requested;
+
+        double contentW = MaxFinite(
+            _contentGrid?.Width,
+            _contentGrid?.Bounds.Width,
+            _scrollViewer.Extent.Width);
+        double contentH = MaxFinite(
+            _contentGrid?.Height,
+            _contentGrid?.Bounds.Height,
+            _scrollViewer.Extent.Height);
+
+        double viewportW = ResolveScrollViewportLength(_scrollViewer.Viewport.Width, _scrollViewer.Bounds.Width);
+        double viewportH = ResolveScrollViewportLength(_scrollViewer.Viewport.Height, _scrollViewer.Bounds.Height);
+
+        double maxX = Math.Max(0, contentW - viewportW);
+        double maxY = Math.Max(0, contentH - viewportH);
+
+        return new Vector(
+            Math.Clamp(requested.X, 0, maxX),
+            Math.Clamp(requested.Y, 0, maxY));
+    }
+
+    private static double MaxFinite(params double?[] values)
+    {
+        double max = 0;
+        foreach (var value in values)
+        {
+            if (value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value))
+                max = Math.Max(max, value.Value);
+        }
+        return max;
+    }
+
+    private static double ResolveScrollViewportLength(params double?[] values)
+    {
+        double min = double.PositiveInfinity;
+        foreach (var value in values)
+        {
+            if (value.HasValue && value.Value > 0 && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value))
+                min = Math.Min(min, value.Value);
+        }
+
+        return double.IsPositiveInfinity(min) ? 0 : min;
+    }
+
+    internal static double ResolveScrollViewportLengthForTest(double viewportLength, double boundsLength)
+    {
+        return ResolveScrollViewportLength(viewportLength, boundsLength);
     }
 
     public void SetTool(Tool tool)
@@ -845,14 +1027,83 @@ public partial class MarkupImageViewer : UserControl
 
     public void ClearMarkups()
     {
+        if (Markups.Count == 0) return;
+
+        PushMarkupUndoState();
         Markups.Clear();
     }
+
+    public bool UndoMarkup()
+    {
+        if (_undoHistory.Count == 0) return false;
+
+        var previous = _undoHistory.Pop();
+        _redoHistory.Push(CloneMarkups());
+        RestoreMarkupSnapshot(previous);
+        return true;
+    }
+
+    public bool RedoMarkup()
+    {
+        if (_redoHistory.Count == 0) return false;
+
+        var next = _redoHistory.Pop();
+        _undoHistory.Push(CloneMarkups());
+        RestoreMarkupSnapshot(next);
+        return true;
+    }
+
+    internal void AddHighlighterForTest(Rect imageRect) => AddHighlighter(imageRect);
+
+    internal void AddTextAreaForTest(Rect imageRect, string text) => AddTextArea(imageRect, text);
+
+    internal void AddArrowForTest(Point start, Point end) => AddArrow(start, end);
+
+    private void PushMarkupUndoState()
+    {
+        if (_restoringMarkupHistory) return;
+
+        _undoHistory.Push(CloneMarkups());
+        _redoHistory.Clear();
+        NotifyMarkupHistoryChanged();
+    }
+
+    private List<ImageMarkup> CloneMarkups() => Markups.Select(static m => m.Clone()).ToList();
+
+    private void RestoreMarkupSnapshot(List<ImageMarkup> snapshot)
+    {
+        _restoringMarkupHistory = true;
+        _suppressMarkupCollectionRedraw = true;
+        try
+        {
+            Markups.Clear();
+            foreach (var markup in snapshot.Select(static m => m.Clone()))
+                Markups.Add(markup);
+        }
+        finally
+        {
+            _suppressMarkupCollectionRedraw = false;
+            _restoringMarkupHistory = false;
+        }
+
+        RedrawMarkups();
+        NotifyMarkupHistoryChanged();
+    }
+
+    private void ClearMarkupHistory()
+    {
+        _undoHistory.Clear();
+        _redoHistory.Clear();
+        NotifyMarkupHistoryChanged();
+    }
+
+    private void NotifyMarkupHistoryChanged() => MarkupHistoryChanged?.Invoke(this);
 
     /// <summary>
     /// Test hook (Byrd / mocks-first, see MarkupImageViewerBaseScaleSizingTests).
     /// Pure decision for base sizing targets. Implementation of the ACs for visible scaled
-    /// content (panel rect box for non-None modes so Stretch visibly fills/affects the allocated
-    /// viewer panel; natural for 1:1 None).
+    /// content (actual displayed bitmap rect for uniform modes; panel rect for fill/distort;
+    /// natural for 1:1 None).
     /// </summary>
     internal static (double targetW, double targetH, Avalonia.Media.Stretch stretch) ComputeBaseSizingForTest(
         Avalonia.Media.Stretch mode, Avalonia.PixelSize natural, Avalonia.Size view)
@@ -864,15 +1115,42 @@ public partial class MarkupImageViewer : UserControl
 
         double vw = view.Width > 0 ? view.Width : 100;
         double vh = view.Height > 0 ? view.Height : 100;
-        return (vw, vh, mode);
+        if (nw <= 0 || nh <= 0)
+            return (vw, vh, mode);
+
+        if (mode == Avalonia.Media.Stretch.Fill)
+            return (vw, vh, mode);
+
+        double scale = mode == Avalonia.Media.Stretch.UniformToFill
+            ? Math.Max(vw / nw, vh / nh)
+            : Math.Min(vw / nw, vh / nh);
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+            scale = 1.0;
+
+        return (nw * scale, nh * scale, mode);
+    }
+
+    internal bool ResolvePartsForTest()
+    {
+        ResolveParts();
+        return _scrollViewer != null
+            && _contentGrid != null
+            && _imageElement != null
+            && _markupOverlay != null;
+    }
+
+    internal bool IsSourceAppliedToImageForTest()
+    {
+        ResolveParts();
+        return Source != null && ReferenceEquals(_imageElement?.Source, Source);
     }
 
     /// <summary>
     /// Sets the base presentation scale for the image, emulating the original dropdown modes
-    /// (None, Stretch, Fit, Fill). Pins the content box to the *actual allocated panel/viewport*
-    /// rect for scaling modes and lets Image.Stretch perform the mapping. This guarantees the
-    /// bitmap is visibly drawn inside the panel area (Fix for black/empty after dynamic reparent
-    /// + layout). Includes viewport timing guard + Dispatcher retry + explicit invalidates.
+    /// (None, Stretch, Fit, Fill). Uses the viewer's actual arranged bounds as the stable viewport
+    /// source, then sizes the content to the real display rect. This avoids stale ScrollViewer
+    /// viewports after dynamic reparenting, which caused fit mode to center the bitmap in an
+    /// oversized content box and clip it below a leading blank band.
     /// The interactive zoom/pan/markups layer on top.
     /// </summary>
     public void SetBaseScale(Avalonia.Media.Stretch stretchMode)
@@ -890,33 +1168,25 @@ public partial class MarkupImageViewer : UserControl
         double naturalW = Source.PixelSize.Width;
         double naturalH = Source.PixelSize.Height;
 
-        double viewW = _scrollViewer.Viewport.Width;
-        double viewH = _scrollViewer.Viewport.Height;
-
-        // Timing guard: after ReconfigureMainLayout (detach/attach Borders into new leftStack or cols)
-        // + UpdateLayout the inner ScrollViewer Viewport can still be 0 or stale on first pass.
-        // Fall back to our arranged Bounds (or conservative) and schedule a retry at Background
-        // so the star-sized panels have settled positive allocation.
-        if (viewW < 20 || viewH < 20)
+        Size viewSize = this.Bounds.Size;
+        if (viewSize.Width < 20 || viewSize.Height < 20)
         {
-            viewW = Math.Max(viewW, this.Bounds.Width);
-            viewH = Math.Max(viewH, this.Bounds.Height);
-            if (viewW < 20 || viewH < 20)
+            viewSize = _scrollViewer.Bounds.Size;
+            if (viewSize.Width < 20 || viewSize.Height < 20)
             {
-                viewW = Math.Max(viewW, 400);
-                viewH = Math.Max(viewH, 300);
-                Dispatcher.UIThread.Post(() => SetBaseScale(stretchMode), DispatcherPriority.Background);
+                viewSize = _scrollViewer.Viewport;
+                if (viewSize.Width < 20 || viewSize.Height < 20)
+                {
+                    viewSize = new Size(400, 300);
+                    Dispatcher.UIThread.Post(() => SetBaseScale(stretchMode), DispatcherPriority.Background);
+                }
             }
         }
-
-        double targetW;
-        double targetH;
 
         if (stretchMode == Avalonia.Media.Stretch.None)
         {
             // 1:1 scrollable: explicit natural size on content so ScrollViewer can pan the full image.
-            targetW = naturalW;
-            targetH = naturalH;
+            var (targetW, targetH, imageStretch) = ComputeBaseSizingForTest(stretchMode, Source.PixelSize, viewSize);
 
             if (_contentGrid != null)
             {
@@ -927,7 +1197,7 @@ public partial class MarkupImageViewer : UserControl
             {
                 _imageElement.Width = targetW;
                 _imageElement.Height = targetH;
-                _imageElement.Stretch = Avalonia.Media.Stretch.None;
+                _imageElement.Stretch = imageStretch;
             }
             if (_markupOverlay != null)
             {
@@ -939,66 +1209,39 @@ public partial class MarkupImageViewer : UserControl
         }
         else
         {
-            // Base scale modes from the dropdown (Fit/Stretch/UniformToFill etc.).
-            // We pin the inner ContentGrid + Image + Overlay to the actual size this viewer control
-            // was allocated by the outer layout (the * rows in leftStack/ContentGrid, the Border's
-            // inner Grid row 1, etc.). This is the "panel" size the user sees.
-            //
-            // Then we set Image.Stretch = the requested mode. The bitmap will be drawn (uniformly
-            // scaled for Fit, distorted for Stretch, etc.) to exactly fill that box.
-            //
-            // This guarantees the image pixels are visible inside the dark panel instead of the
-            // content box being NaN/collapsed or sized to a stale Viewport that doesn't match the
-            // final arranged size after dynamic reparenting.
-            //
-            // We prefer this.Bounds (the size the parent gave *us*) over the inner ScrollViewer's
-            // Viewport because the viewer is the thing placed in the star-sized slot.
-            Size targetSize = this.Bounds.Size;
-            if (targetSize.Width < 10 || targetSize.Height < 10)
-            {
-                if (_scrollViewer != null && _scrollViewer.Viewport.Width > 10 && _scrollViewer.Viewport.Height > 10)
-                {
-                    targetSize = _scrollViewer.Viewport;
-                }
-                else
-                {
-                    targetSize = new Size(400, 300);
-                    // The size isn't known yet (initial layout or reparent). Schedule a retry.
-                    // OnViewerSizeChanged / OnViewportSizeChanged will also call us again when
-                    // a real positive size arrives.
-                    Dispatcher.UIThread.Post(() => SetBaseScale(stretchMode), DispatcherPriority.Background);
-                }
-            }
+            // Base scale modes (Fit/Stretch/UniformToFill from the dropdown). Fit computes the
+            // concrete scaled bitmap rect; cover computes the concrete scrollable cover rect;
+            // distort uses the full panel rect. Avoid using ScrollViewer.Viewport as the primary
+            // source because it can remain stale after the hidden-host reparent into leftStack.
+            var (targetW, targetH, imageStretch) = ComputeBaseSizingForTest(stretchMode, Source.PixelSize, viewSize);
 
             if (_contentGrid != null)
             {
-                _contentGrid.Width = targetSize.Width;
-                _contentGrid.Height = targetSize.Height;
+                _contentGrid.Width = targetW;
+                _contentGrid.Height = targetH;
             }
             if (_imageElement != null)
             {
-                _imageElement.Width = targetSize.Width;
-                _imageElement.Height = targetSize.Height;
-                _imageElement.Stretch = stretchMode;
+                _imageElement.Width = targetW;
+                _imageElement.Height = targetH;
+                _imageElement.Stretch = imageStretch;
             }
             if (_markupOverlay != null)
             {
-                _markupOverlay.Width = targetSize.Width;
-                _markupOverlay.Height = targetSize.Height;
+                _markupOverlay.Width = targetW;
+                _markupOverlay.Height = targetH;
             }
 
-            // Starting zoom for subsequent wheel/zoom gestures so they feel relative to the
-            // current visual scale.
             double effectiveZoom = 1.0;
-            if (naturalW > 0 && targetSize.Width > 0)
+            if (naturalW > 0 && targetW > 0)
             {
-                effectiveZoom = Math.Min(targetSize.Width / naturalW, targetSize.Height / naturalH);
+                effectiveZoom = Math.Min(targetW / naturalW, targetH / naturalH);
                 if (effectiveZoom <= 0) effectiveZoom = 1.0;
             }
             _zoom = effectiveZoom;
         }
 
-        _scrollViewer!.Offset = new Vector(0, 0);
+        SetScrollOffset(new Vector(0, 0));
 
         RedrawMarkups();
 
@@ -1034,6 +1277,15 @@ public class ImageMarkup
     public Point? EndPoint { get; set; }
 
     public string? Text { get; set; }
+
+    public ImageMarkup Clone() => new()
+    {
+        Type = Type,
+        Bounds = Bounds,
+        StartPoint = StartPoint,
+        EndPoint = EndPoint,
+        Text = Text
+    };
 }
 
 public enum MarkupType

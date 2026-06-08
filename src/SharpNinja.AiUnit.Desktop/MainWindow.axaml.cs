@@ -24,9 +24,10 @@ public partial class MainWindow : Window
     private string _scenariosFolder = string.Empty;
 
     // Tracks the last MarkupImageViewer the user interacted with (via mouse).
-    // Toolbar zoom level actions (in/out/fit) use this for independent per-image control.
+    // Zoom/pan view-state changes are mirrored to the peer viewer for comparison alignment.
     // Mode changes (Pan, Highlighter, etc.) are still applied to both for convenience.
     private Controls.MarkupImageViewer? _activeViewer;
+    private bool _syncingImageViewState;
 
     private static readonly (string Label, Avalonia.Media.Stretch Stretch)[] _scaleOptions = new[]
     {
@@ -88,20 +89,18 @@ public partial class MainWindow : Window
         {
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             var info = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            string ver = "0.0.0";
+
+            string ver;
             if (!string.IsNullOrWhiteSpace(info))
             {
-                // Show a build-varying version. GitVersion produces things like
-                // "0.11.0-beta.2+Branch.main.Sha.6f7aa7e5..." or similar.
-                // Include a short commit identifier (after + or last . in sha) so the label
-                // is not *always* the same "0.11.0-beta.2" after every commit/redeploy.
-                // Users (and you) can now see that a new build is actually running.
+                // Prefer the InformationalVersion (set by GitVersion during Nuke build via
+                // /p:InformationalVersion + GitVersion.MsBuild). We format it as
+                // "0.11.1-beta.3+1c5bb33" so the UI label visibly changes on every rebuild/redeploy.
                 var plus = info.IndexOf('+');
                 if (plus > 0)
                 {
                     var baseVer = info.Substring(0, plus);
                     var meta = info.Substring(plus + 1);
-                    // Try to extract a short sha (common in InformationalVersion)
                     var shortSha = meta;
                     var shaIdx = meta.LastIndexOf('.');
                     if (shaIdx > 0 && shaIdx < meta.Length - 1)
@@ -116,8 +115,11 @@ public partial class MainWindow : Window
             }
             else
             {
-                ver = asm.GetName().Version?.ToString() ?? "0.0.0";
+                // Fallbacks (should rarely be hit now that Nuke always passes the GitVersion values)
+                var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(asm.Location);
+                ver = fvi.ProductVersion ?? fvi.FileVersion ?? asm.GetName().Version?.ToString() ?? "0.0.0";
             }
+
             VersionText.Text = ver;
         }
         catch
@@ -170,12 +172,21 @@ public partial class MainWindow : Window
                 ReconfigureMainLayout(false);
             }
 
-            // Wire activation tracking so toolbar zoom level actions can target the last-used image
-            // (mouse wheel/pan are already per-viewer and independent).
+            // Wire activation tracking and synchronized image view-state (wheel zoom, drag pan,
+            // box zoom, and toolbar zoom/fits).
             if (WireframeViewer != null)
-                WireframeViewer.Activated += v => _activeViewer = v;
+            {
+                WireframeViewer.Activated += SetActiveImageViewer;
+                WireframeViewer.ViewChanged += OnImageViewerViewChanged;
+                WireframeViewer.MarkupHistoryChanged += OnMarkupHistoryChanged;
+            }
             if (ScreenshotViewer != null)
-                ScreenshotViewer.Activated += v => _activeViewer = v;
+            {
+                ScreenshotViewer.Activated += SetActiveImageViewer;
+                ScreenshotViewer.ViewChanged += OnImageViewerViewChanged;
+                ScreenshotViewer.MarkupHistoryChanged += OnMarkupHistoryChanged;
+            }
+            UpdateMarkupHistoryButtons();
 
             // Default launch pwsh in CWD (as per requirement)
             // The control is now in XAML; launch on button or auto.
@@ -303,6 +314,59 @@ public partial class MainWindow : Window
         var stretch = _scaleOptions[index].Stretch;
         WireframeViewer?.SetBaseScale(stretch);
         ScreenshotViewer?.SetBaseScale(stretch);
+    }
+
+    private void OnImageViewerViewChanged(
+        Controls.MarkupImageViewer source,
+        Controls.MarkupImageViewer.ViewState state)
+    {
+        if (_syncingImageViewState) return;
+
+        SetActiveImageViewer(source);
+        _syncingImageViewState = true;
+        try
+        {
+            foreach (var viewer in GetImageViewers())
+            {
+                if (!ReferenceEquals(viewer, source))
+                    viewer.ApplyViewState(state);
+            }
+        }
+        finally
+        {
+            _syncingImageViewState = false;
+        }
+    }
+
+    private void SetActiveImageViewer(Controls.MarkupImageViewer viewer)
+    {
+        _activeViewer = viewer;
+        UpdateMarkupHistoryButtons();
+    }
+
+    private void OnMarkupHistoryChanged(Controls.MarkupImageViewer viewer)
+    {
+        if (_activeViewer == null)
+            _activeViewer = viewer;
+
+        UpdateMarkupHistoryButtons();
+    }
+
+    private void UpdateMarkupHistoryButtons()
+    {
+        var target = _activeViewer ?? WireframeViewer;
+        if (UndoMarkupButton != null)
+            UndoMarkupButton.IsEnabled = target?.CanUndoMarkup == true;
+        if (RedoMarkupButton != null)
+            RedoMarkupButton.IsEnabled = target?.CanRedoMarkup == true;
+    }
+
+    private IEnumerable<Controls.MarkupImageViewer> GetImageViewers()
+    {
+        if (WireframeViewer != null)
+            yield return WireframeViewer;
+        if (ScreenshotViewer != null)
+            yield return ScreenshotViewer;
     }
 
     private static void InvalidateLayoutTarget(Avalonia.Layout.Layoutable? target)
@@ -554,6 +618,25 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
+        if (IsTextInputEventSource(e.Source))
+            return;
+
+        bool ctrl = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
+        bool shift = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift);
+        if (ctrl && e.Key == Avalonia.Input.Key.Z && !shift)
+        {
+            UndoActiveMarkup();
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && (e.Key == Avalonia.Input.Key.Y || (e.Key == Avalonia.Input.Key.Z && shift)))
+        {
+            RedoActiveMarkup();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Avalonia.Input.Key.Left || e.Key == Avalonia.Input.Key.PageUp)
         {
             PrevScenarioClicked(sender, null!);
@@ -564,6 +647,20 @@ public partial class MainWindow : Window
             NextScenarioClicked(sender, null!);
             e.Handled = true;
         }
+    }
+
+    private static bool IsTextInputEventSource(object? source)
+    {
+        var current = source as Control;
+        while (current != null)
+        {
+            if (current is TextBox)
+                return true;
+
+            current = current.Parent as Control;
+        }
+
+        return false;
     }
 
     private void SaveVerdictClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -659,10 +756,36 @@ public partial class MainWindow : Window
         ScreenshotViewer?.SetTool(Controls.MarkupImageViewer.Tool.Arrow);
     }
 
+    private void ToolbarUndoMarkupClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        UndoActiveMarkup();
+    }
+
+    private void ToolbarRedoMarkupClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        RedoActiveMarkup();
+    }
+
     private void ToolbarClearMarkupsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         WireframeViewer?.ClearMarkups();
         ScreenshotViewer?.ClearMarkups();
+    }
+
+    private void UndoActiveMarkup()
+    {
+        var target = _activeViewer ?? WireframeViewer;
+        if (target?.UndoMarkup() == true && TerminalStatusText != null)
+            TerminalStatusText.Text = "Markup undo";
+        UpdateMarkupHistoryButtons();
+    }
+
+    private void RedoActiveMarkup()
+    {
+        var target = _activeViewer ?? WireframeViewer;
+        if (target?.RedoMarkup() == true && TerminalStatusText != null)
+            TerminalStatusText.Text = "Markup redo";
+        UpdateMarkupHistoryButtons();
     }
 
     // Paste the (single-line) prompt into the terminal (via XTerm send or pty writer paste path).

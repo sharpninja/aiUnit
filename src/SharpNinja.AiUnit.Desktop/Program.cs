@@ -23,6 +23,28 @@ internal static class Program
             return 0;
         }
 
+        if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine("aiunit-review");
+            Console.WriteLine("Usage: aiunit-review [--probe-exit] [--version] [--help]");
+            Console.WriteLine("--probe-exit  Validate startup wiring without opening the GUI.");
+            Console.WriteLine("--version     Print the packaged tool version and exit.");
+            return 0;
+        }
+
+        // Write the complete SemVer (from GitVersion / AssemblyInformationalVersion) to console on startup.
+        // This is the full value including pre-release + build metadata (e.g. 0.11.1-beta.3+Branch.main.Sha.1c5bb33...).
+        // The UI label trims for display; console gets the complete string.
+        Console.WriteLine(GetVersionText());
+
+        if (args.Any(a => string.Equals(a, "--version", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(a, "-v", StringComparison.OrdinalIgnoreCase)))
+        {
+            return 0;
+        }
+
         // TODO (per revision/plan): Setup DI for RemoteControl hosting here when version aligned.
         // Example (requires the Server ref):
         // var services = new ServiceCollection();
@@ -43,4 +65,11 @@ internal static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    internal static string GetVersionText()
+    {
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        var attr = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(asm);
+        return attr?.InformationalVersion ?? "aiunit-review (version unknown)";
+    }
 }

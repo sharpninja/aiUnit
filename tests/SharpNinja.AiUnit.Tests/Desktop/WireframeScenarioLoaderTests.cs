@@ -633,16 +633,22 @@ public sealed class MarkupImageViewerBaseScaleSizingTests
 
         double vw = view.Width > 0 ? view.Width : 100;
         double vh = view.Height > 0 ? view.Height : 100;
-        return (vw, vh, mode);
+        if (mode == Avalonia.Media.Stretch.Fill)
+            return (vw, vh, mode);
+
+        var scale = mode == Avalonia.Media.Stretch.UniformToFill
+            ? Math.Max(vw / nat.Width, vh / nat.Height)
+            : Math.Min(vw / nat.Width, vh / nat.Height);
+        return (nat.Width * scale, nat.Height * scale, mode);
     }
 
     [Fact]
-    public void AC_RENDER_001_Stub_Fit_Uniform_Pins_ContentBox_To_Panel_View_Rect()
+    public void AC_RENDER_001_Stub_Fit_Uniform_Computes_Whole_Bitmap_Rect_Inside_View()
     {
         var nat = new Avalonia.PixelSize(1200, 800); // landscape wireframe example
         var view = new Avalonia.Size(650, 420);      // allocated panel slot (aspect != nat)
         var (w, h, s) = StubComputeBase(Avalonia.Media.Stretch.Uniform, nat, view);
-        Assert.Equal(650, w); // must be the panel rect, not the smaller fitted-natural (~560x373)
+        Assert.Equal(630, w); // full image fits by height, preserving aspect
         Assert.Equal(420, h);
         Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
     }
@@ -665,7 +671,7 @@ public sealed class MarkupImageViewerBaseScaleSizingTests
         var view = new Avalonia.Size(0, 0);
         var (w, h, s) = StubComputeBase(Avalonia.Media.Stretch.Uniform, nat, view);
         Assert.True(w >= 100);
-        Assert.True(h >= 100);
+        Assert.True(h > 0);
         Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
     }
 
@@ -679,7 +685,7 @@ public sealed class MarkupImageViewerBaseScaleSizingTests
         var nat = new Avalonia.PixelSize(1200, 800);
         var view = new Avalonia.Size(640, 400);
         var (w, h, s) = real(Avalonia.Media.Stretch.Uniform, nat, view);
-        Assert.Equal(640, w);
+        Assert.Equal(600, w);
         Assert.Equal(400, h);
         Assert.Equal(Avalonia.Media.Stretch.Uniform, s);
 
@@ -687,5 +693,188 @@ public sealed class MarkupImageViewerBaseScaleSizingTests
         Assert.Equal(1200, w2);
         Assert.Equal(800, h2);
         Assert.Equal(Avalonia.Media.Stretch.None, s2);
+    }
+
+    [Fact]
+    public void AC_RENDER_004_Viewer_Resolves_Xaml_Image_Parts_In_Constructor()
+    {
+        var viewer = new SharpNinja.AiUnit.Desktop.Controls.MarkupImageViewer();
+
+        Assert.True(viewer.ResolvePartsForTest());
+    }
+
+    [Fact]
+    public void AC_RENDER_005_Source_Resolution_Does_Not_Depend_On_TemplateApplied()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("InitializeComponent();\n        ResolveParts();", source, StringComparison.Ordinal);
+        Assert.Contains("this.FindControl<Image>(\"ImageElement\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_006_Viewer_Publishes_ViewState_For_Wheel_Zoom_And_Pan()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("public event Action<MarkupImageViewer, ViewState>? ViewChanged;", source, StringComparison.Ordinal);
+        Assert.Contains("public void ApplyViewState(ViewState state)", source, StringComparison.Ordinal);
+        Assert.Contains("ApplyInteractiveZoom(_zoom * factor);", source, StringComparison.Ordinal);
+        Assert.Contains("SetScrollOffset(newOffset);\n            NotifyViewChanged();", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_007_MainWindow_Mirrors_Image_ViewState_To_Peer_Viewer()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("WireframeViewer.ViewChanged += OnImageViewerViewChanged;", source, StringComparison.Ordinal);
+        Assert.Contains("ScreenshotViewer.ViewChanged += OnImageViewerViewChanged;", source, StringComparison.Ordinal);
+        Assert.Contains("viewer.ApplyViewState(state);", source, StringComparison.Ordinal);
+        Assert.Contains("_syncingImageViewState", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_008_Pan_And_Zoom_Offsets_Are_Clamped_After_Refreshing_Scroll_Extent()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("private void SetScrollOffset(Vector requested, bool refreshLayout = false)", source, StringComparison.Ordinal);
+        Assert.Contains("private Vector ClampScrollOffset(Vector requested)", source, StringComparison.Ordinal);
+        Assert.Contains("double maxY = Math.Max(0, contentH - viewportH);", source, StringComparison.Ordinal);
+        Assert.Contains("SetScrollOffset(new Vector(newOffsetX, newOffsetY), refreshLayout: true);", source, StringComparison.Ordinal);
+        Assert.Contains("SetScrollOffset(state.Offset, refreshLayout: true);", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_009_ScrollViewer_Offset_Changes_Publish_ViewState_For_Scrollbars()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("_scrollViewer.PropertyChanged += OnScrollViewerPropertyChanged;", source, StringComparison.Ordinal);
+        Assert.Contains("if (e.Property == ScrollViewer.OffsetProperty)", source, StringComparison.Ordinal);
+        Assert.Contains("private void OnScrollViewerOffsetChanged()", source, StringComparison.Ordinal);
+        Assert.Contains("if (_suppressViewChanged || _scrollViewer == null || Source == null) return;", source, StringComparison.Ordinal);
+        Assert.Contains("Activated?.Invoke(this);\n        _lastBaseStretch = null;\n        NotifyViewChanged();", source, StringComparison.Ordinal);
+        Assert.Contains("_suppressViewChanged = true;\n        try\n        {\n            _scrollViewer.Offset = ClampScrollOffset(requested);", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_010_Text_Area_Markup_Uses_Editable_TextBox_And_Focuses_New_Note()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("private void RedrawMarkups(ImageMarkup? focusTextMarkup = null)", source, StringComparison.Ordinal);
+        Assert.Contains("var tb = new TextBox", source, StringComparison.Ordinal);
+        Assert.Contains("AcceptsReturn = true", source, StringComparison.Ordinal);
+        Assert.Contains("TextWrapping = TextWrapping.Wrap", source, StringComparison.Ordinal);
+        Assert.Contains("PushMarkupUndoState();\n                                textUndoCaptured = true;", source, StringComparison.Ordinal);
+        Assert.Contains("m.Text = tb.Text ?? string.Empty;", source, StringComparison.Ordinal);
+        Assert.Contains("tb.PointerPressed += (_, args)", source, StringComparison.Ordinal);
+        Assert.Contains("args.Handled = true;", source, StringComparison.Ordinal);
+        Assert.Contains("FocusTextArea(tb);", source, StringComparison.Ordinal);
+        Assert.Contains("private void AddTextArea(Rect imageRect, string text)", source, StringComparison.Ordinal);
+        Assert.Contains("Markups.Add(markup);\n        RedrawMarkups(markup);", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_011_Text_Input_Key_Events_Are_Not_Consumed_By_Navigation_Shortcuts()
+    {
+        var root = FindRepoRootForViewerTest();
+        var sourcePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml.cs");
+        var source = File.ReadAllText(sourcePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("if (IsTextInputEventSource(e.Source))\n            return;", source, StringComparison.Ordinal);
+        Assert.Contains("private static bool IsTextInputEventSource(object? source)", source, StringComparison.Ordinal);
+        Assert.Contains("if (current is TextBox)\n                return true;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AC_RENDER_012_Vertical_Pan_Clamp_Uses_Smallest_Positive_Viewport_Not_Stale_Max()
+    {
+        var resolve = SharpNinja.AiUnit.Desktop.Controls.MarkupImageViewer.ResolveScrollViewportLengthForTest;
+
+        Assert.Equal(420, resolve(420, 900));
+        Assert.Equal(420, resolve(0, 420));
+        Assert.Equal(420, resolve(double.NaN, 420));
+    }
+
+    [Fact]
+    public void AC_RENDER_013_Markup_History_Undoes_And_Redoes_Adds_And_Clear()
+    {
+        var viewer = new SharpNinja.AiUnit.Desktop.Controls.MarkupImageViewer();
+
+        Assert.False(viewer.CanUndoMarkup);
+        Assert.False(viewer.CanRedoMarkup);
+
+        viewer.AddHighlighterForTest(new Avalonia.Rect(1, 2, 30, 40));
+
+        Assert.Single(viewer.Markups);
+        Assert.True(viewer.CanUndoMarkup);
+        Assert.False(viewer.CanRedoMarkup);
+
+        Assert.True(viewer.UndoMarkup());
+        Assert.Empty(viewer.Markups);
+        Assert.False(viewer.CanUndoMarkup);
+        Assert.True(viewer.CanRedoMarkup);
+
+        Assert.True(viewer.RedoMarkup());
+        Assert.Single(viewer.Markups);
+        Assert.True(viewer.CanUndoMarkup);
+        Assert.False(viewer.CanRedoMarkup);
+
+        viewer.ClearMarkups();
+
+        Assert.Empty(viewer.Markups);
+        Assert.True(viewer.UndoMarkup());
+        Assert.Single(viewer.Markups);
+    }
+
+    [Fact]
+    public void AC_RENDER_014_Markup_Undo_Redo_Is_Wired_To_Toolbar_And_Ctrl_Shortcuts()
+    {
+        var root = FindRepoRootForViewerTest();
+        var xamlPath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml");
+        var mainWindowPath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml.cs");
+        var viewerPath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "Controls", "MarkupImageViewer.axaml.cs");
+
+        var xaml = File.ReadAllText(xamlPath).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var mainWindow = File.ReadAllText(mainWindowPath).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var viewer = File.ReadAllText(viewerPath).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"UndoMarkupButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ToolbarUndoMarkupClicked\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RedoMarkupButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ToolbarRedoMarkupClicked\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("public event Action<MarkupImageViewer>? MarkupHistoryChanged;", viewer, StringComparison.Ordinal);
+        Assert.Contains("public bool UndoMarkup()", viewer, StringComparison.Ordinal);
+        Assert.Contains("public bool RedoMarkup()", viewer, StringComparison.Ordinal);
+        Assert.Contains("WireframeViewer.MarkupHistoryChanged += OnMarkupHistoryChanged;", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("if (ctrl && e.Key == Avalonia.Input.Key.Z && !shift)", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("if (ctrl && (e.Key == Avalonia.Input.Key.Y || (e.Key == Avalonia.Input.Key.Z && shift)))", mainWindow, StringComparison.Ordinal);
+    }
+
+    private static string FindRepoRootForViewerTest()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "SharpNinja.aiUnit.sln")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        return AppContext.BaseDirectory;
     }
 }

@@ -96,6 +96,10 @@ Every aiUnit review result JSON (AiCodeReview/AiPlanReview/AiProjectReview) must
 
 aiUnit must support an optional appsettings configuration value (AiUnit.Results.OutputDirectory) specifying the directory where review run-log result files are written. Each result file name must include a sortable UTC datetime of the start of the test. When unset, a default directory (aiunit-results under the test output base directory) is used. An optional AiUnit.Results.OnlineBaseUrl supplies the base for the online run-log URL.
 
+## FR-AIUNIT-026 Every local build and redeploy uses a unique package version
+
+Nuke-controlled builds and local dotnet-tool redeploys must avoid reusing package versions. When no explicit Version is supplied, the build appends a sanitized build-number suffix from CI build identifiers or a UTC timestamp to the GitVersion base version, uses that value consistently for assembly informational version, package version, pack output, smoke tests, and global tool redeploy package selection, and still allows explicit release Version overrides.
+
 ## FR-AIUNITDESKTOP-001 Scenarios load from configurable folders
 
 Desktop app loads wireframe scenarios from three user-configurable folder paths (scenarios YAML, wireframe SVG, actual screenshot PNG) instead of marker-walking the repo. Loader resolves YAML-relative paths against the configured wireframes and screenshots folders, accepts absolute paths verbatim, and surfaces a per-scenario error placeholder when a referenced image is missing.
@@ -151,6 +155,10 @@ An IconKit maps logical icon names (Send, Settings, Play, FolderOpen, NewWindow,
 ## FR-AIUNITDESKTOP-014 Distribution as dotnet tool aiunit-review with probe-exit smoke
 
 The Desktop app ships as a packable dotnet tool. csproj has PackAsTool true, ToolCommandName aiunit-review, PackageId SharpNinja aiUnit Desktop Tool. Users install with dotnet tool install global and run aiunit-review. The app honors a probe-exit flag that returns 0 immediately without opening a window so CI can smoke-test the package on headless agents.
+
+## FR-AIUNITDESKTOP-015 Synchronized comparison viewer interactions and editable markup history
+
+aiunit-review comparison panes must keep wireframe and screenshot images visually aligned during fit, mousewheel zoom, pointer panning, native scrolling, and toolbar zoom actions. Markup tools must support highlighter, arrow, editable text notes, clear, and per-pane undo/redo history without intercepting text input.
 
 ## FR-AIUNITREPL-001 Discover aiUnit-enabled projects
 

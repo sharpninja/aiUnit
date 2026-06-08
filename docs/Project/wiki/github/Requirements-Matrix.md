@@ -28,6 +28,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | FR-AIUNIT-023 | Tracked | Functional-Requirements.md |
 | FR-AIUNIT-024 | Tracked | Functional-Requirements.md |
 | FR-AIUNIT-025 | Tracked | Functional-Requirements.md |
+| FR-AIUNIT-026 | Tracked | Functional-Requirements.md |
 | FR-AIUNITDESKTOP-001 | Tracked | Functional-Requirements.md |
 | FR-AIUNITDESKTOP-002 | Tracked | Functional-Requirements.md |
 | FR-AIUNITDESKTOP-003 | Tracked | Functional-Requirements.md |
@@ -42,6 +43,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | FR-AIUNITDESKTOP-012 | Tracked | Functional-Requirements.md |
 | FR-AIUNITDESKTOP-013 | Tracked | Functional-Requirements.md |
 | FR-AIUNITDESKTOP-014 | Tracked | Functional-Requirements.md |
+| FR-AIUNITDESKTOP-015 | Tracked | Functional-Requirements.md |
 | FR-AIUNITREPL-001 | Tracked | Functional-Requirements.md |
 | FR-AIUNITREPL-002 | Tracked | Functional-Requirements.md |
 | FR-AIUNITREPL-003 | Tracked | Functional-Requirements.md |
@@ -57,6 +59,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | FR-LOBBY-MIGRATION-001 | Tracked | Functional-Requirements.md |
 | TR-AIUNIT-ARCH-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CI-001 | Tracked | Technical-Requirements.md |
+| TR-AIUNIT-CI-002 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CLI-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CLI-002 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-CLI-003 | Tracked | Technical-Requirements.md |
@@ -79,6 +82,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TR-AIUNITDESKTOP-SETTINGS-002 | Tracked | Technical-Requirements.md |
 | TR-AIUNITDESKTOP-TERMINAL-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNITDESKTOP-UI-001 | Tracked | Technical-Requirements.md |
+| TR-AIUNITDESKTOP-UI-002 | Tracked | Technical-Requirements.md |
 | TR-AIUNITDESKTOP-UNDOCK-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNITDESKTOP-VERDICT-001 | Tracked | Technical-Requirements.md |
 | TR-AIUNIT-FRONTIER-001 | Tracked | Technical-Requirements.md |
@@ -186,6 +190,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TEST-AIUNIT-066 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-067 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-068 | Tracked | Testing-Requirements.md |
+| TEST-AIUNIT-069 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-001 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-002 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-003 | Tracked | Testing-Requirements.md |
@@ -200,6 +205,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TEST-AIUNITDESKTOP-012 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-013 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-014 | Tracked | Testing-Requirements.md |
+| TEST-AIUNITDESKTOP-015 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITREPL-001 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-RESILIENCE-001 | Tracked | Testing-Requirements.md |
 | TEST-LOBBY-001 | Tracked | Testing-Requirements.md |
