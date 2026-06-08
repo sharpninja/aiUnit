@@ -14,6 +14,7 @@ pr:
 
 variables:
   BuildConfiguration: Release
+  NukeDotNetSdkVersion: 8.0.x
   DotNetSdkVersion: 10.0.204
   NuGetPackageOutput: $(Build.SourcesDirectory)\artifacts\nupkg
 
@@ -26,7 +27,13 @@ steps:
     fetchDepth: 0
 
   - task: UseDotNet@2
-    displayName: Install .NET SDK
+    displayName: Install .NET 8 SDK for Nuke
+    inputs:
+      packageType: sdk
+      version: $(NukeDotNetSdkVersion)
+
+  - task: UseDotNet@2
+    displayName: Install .NET 10 SDK
     inputs:
       packageType: sdk
       version: $(DotNetSdkVersion)
