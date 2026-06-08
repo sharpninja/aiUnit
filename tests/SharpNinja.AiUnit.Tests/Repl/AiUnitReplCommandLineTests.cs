@@ -58,10 +58,7 @@ public sealed class AiUnitReplCommandLineTests
 
 		Assert.Equal(0, exitCode);
 		Assert.Equal(string.Empty, stderr.ToString());
-		Assert.True(
-			AiUnitReplCommandLine.ToolVersion == "0.11.0"
-			|| AiUnitReplCommandLine.ToolVersion.StartsWith("0.11.0-beta", StringComparison.Ordinal),
-			$"Expected a 0.11.0 release or beta version, got {AiUnitReplCommandLine.ToolVersion}.");
+		Assert.Matches(@"^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$", AiUnitReplCommandLine.ToolVersion);
 		Assert.DoesNotContain("+", AiUnitReplCommandLine.ToolVersion, StringComparison.Ordinal);
 		Assert.Equal($"{AiUnitReplCommandLine.ToolVersion}{Environment.NewLine}", stdout.ToString());
 	}

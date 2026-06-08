@@ -14,7 +14,7 @@ pr:
 
 variables:
   BuildConfiguration: Release
-  DotNetSdkVersion: 10.0.x
+  DotNetSdkVersion: 10.0.204
   NuGetPackageOutput: $(Build.SourcesDirectory)\artifacts\nupkg
 
 pool:

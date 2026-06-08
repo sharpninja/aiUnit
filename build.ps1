@@ -28,14 +28,53 @@ $env:DOTNET_NOLOGO = 1
 ###########################################################################
 
 function ExecSafe([scriptblock] $cmd) {
+    $global:LASTEXITCODE = 0
     & $cmd
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
 }
 
+function Get-RequestedDotNetSdkVersion() {
+    if (-not (Test-Path $DotNetGlobalFile)) {
+        return $null
+    }
+
+    $dotNetGlobal = Get-Content $DotNetGlobalFile | ConvertFrom-Json
+    if ($dotNetGlobal.PSObject.Properties.Name -notcontains 'sdk') {
+        return $null
+    }
+
+    return $dotNetGlobal.sdk.version
+}
+
+function Test-DotNetSdkInstalled([string] $dotNetExe, [string] $requestedVersion) {
+    if ([string]::IsNullOrWhiteSpace($requestedVersion)) {
+        return $true
+    }
+
+    $global:LASTEXITCODE = 0
+    $installedSdks = & $dotNetExe --list-sdks 2>$null
+    $exitCode = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    if ($exitCode) {
+        return $false
+    }
+
+    foreach ($installedSdk in $installedSdks) {
+        $installedVersion = ($installedSdk -split '\s+')[0]
+        if ($installedVersion -eq $requestedVersion) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+$RequestedDotNetSdkVersion = Get-RequestedDotNetSdkVersion
+
 # If dotnet CLI is installed globally and it matches requested version, use for execution
-if ($null -ne (Get-Command "dotnet" -ErrorAction SilentlyContinue) -and `
-     ( & dotnet --version | Out-String ).Trim() -ge (Get-Content $DotNetGlobalFile | ConvertFrom-Json).sdk.version) {
-    $env:DOTNET_EXE = (Get-Command "dotnet").Path
+$dotNetCommand = Get-Command "dotnet" -ErrorAction SilentlyContinue
+if ($null -ne $dotNetCommand -and (Test-DotNetSdkInstalled $dotNetCommand.Path $RequestedDotNetSdkVersion)) {
+    $env:DOTNET_EXE = $dotNetCommand.Path
 }
 else {
     # Download install script
@@ -45,11 +84,8 @@ else {
     (New-Object System.Net.WebClient).DownloadFile($DotNetInstallUrl, $DotNetInstallFile)
 
     # If global.json exists, load requested SDK version
-    if (Test-Path $DotNetGlobalFile) {
-        $DotNetGlobal = Get-Content $DotNetGlobalFile | ConvertFrom-Json
-        if ($DotNetGlobal.PSObject.Properties.Name -contains 'sdk') {
-            $DotNetChannel = $DotNetGlobal.sdk.version
-        }
+    if (-not [string]::IsNullOrWhiteSpace($RequestedDotNetSdkVersion)) {
+        $DotNetChannel = $RequestedDotNetSdkVersion
     }
 
     # Install .NET SDK and add to PATH

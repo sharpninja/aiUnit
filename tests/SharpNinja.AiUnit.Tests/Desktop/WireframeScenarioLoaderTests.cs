@@ -574,23 +574,30 @@ public sealed class MainWindowPanelSplittersTests
     [Fact]
     public void AC_UI_SPLIT_001_002_003_Real_Xaml_Has_GridSplitters_And_Mirrored_Columns_After_Impl()
     {
-        // Byrd: post-impl real coverage by inspecting the source XAML (no Avalonia runtime needed).
+        // Byrd: post-impl real coverage by inspecting the source files (no Avalonia runtime needed).
         // Uses the repo root finder (local copy to keep class self contained).
         var root = FindRepoRootForSplitterTest();
         var xamlPath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml");
+        var codePath = Path.Combine(root, "src", "SharpNinja.AiUnit.Desktop", "MainWindow.axaml.cs");
         Assert.True(File.Exists(xamlPath));
+        Assert.True(File.Exists(codePath));
         var content = File.ReadAllText(xamlPath);
+        var code = File.ReadAllText(codePath);
 
-        // AC-UI-SPLIT-001: body uses the splitter column defs
+        // AC-UI-SPLIT-001: body is dynamically reconfigured with splitter columns.
+        Assert.Contains("x:Name=\"ContentGrid\"", content);
+        Assert.Contains("ContentGrid.ColumnDefinitions.Clear()", code);
+        Assert.Contains("ContentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });", code);
+
+        // AC-UI-SPLIT-002: horizontal three-panel mode creates two vertical splitters between panels.
+        Assert.Contains("var vs1 = CreateVerticalSplitter();", code);
+        Assert.Contains("Grid.SetColumn(vs1, 1);", code);
+        Assert.Contains("var vs2 = CreateVerticalSplitter();", code);
+        Assert.Contains("Grid.SetColumn(vs2, 3);", code);
+        Assert.Contains("ResizeDirection = GridResizeDirection.Columns", code);
+
+        // AC-UI-SPLIT-003: status bar mirrors the horizontal body column structure (for alignment).
         Assert.Contains("ColumnDefinitions=\"*,Auto,*,Auto,*\"", content);
-
-        // AC-UI-SPLIT-002: exactly two GridSplitter elements between the three panels
-        var splitterCount = System.Text.RegularExpressions.Regex.Matches(content, "<GridSplitter").Count;
-        Assert.Equal(2, splitterCount);
-        Assert.Contains("ResizeDirection=\"Columns\"", content);
-
-        // AC-UI-SPLIT-003: status bar mirrors the column structure (for alignment)
-        Assert.Contains("ColumnDefinitions=\"*,Auto,*,Auto,*\"", content); // appears (at least for body, and status now too)
         // The status contents are now in the even columns (0,2,4)
         Assert.Contains("Grid.Column=\"2\"", content); // middle status moved to col 2
         Assert.Contains("Grid.Column=\"4\"", content); // right status in col 4
