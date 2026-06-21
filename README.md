@@ -115,6 +115,14 @@ strategy is resolved at process start and shared by all tests in the run.
         "Temperature": 0.0,
         "Description": "Claude Code CLI."
       },
+      "grok-build": {
+        "Kind": "cli",
+        "Command": "grok",
+        "Model": "grok-build",
+        "TimeoutSeconds": 900,
+        "Temperature": 0.0,
+        "Description": "Grok Build CLI using the logged-in Grok account."
+      },
       "grok": {
         "Kind": "openai-compatible",
         "BaseUrl": "https://api.x.ai",
@@ -185,6 +193,9 @@ codex login
 
 # Copilot CLI
 $env:COPILOT_API_KEY = "<key>"
+
+# Grok Build CLI
+# Authenticate with your installed Grok Build CLI before selecting grok-build.
 ```
 
 For HTTP strategies, set the variable named in `ApiKeyEnvVar`:

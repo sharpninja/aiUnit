@@ -38,7 +38,7 @@
 
 ## TR-AIUNIT-CONFIG-004
 
-**Bundled sample appsettings** — samples/appsettings.aiunit.json must include current examples for Codex subscription CLI, Claude Code CLI Opus, Copilot CLI Gemini, xAI Grok through the OpenAI-compatible endpoint, and HTTP fallback strategies.
+**Bundled sample appsettings** — samples/appsettings.aiunit.json must include current examples for Codex subscription CLI, Claude Code CLI Opus, Copilot CLI Gemini, Grok Build CLI, xAI Grok through the OpenAI-compatible endpoint, and HTTP fallback strategies.
 
 ## TR-AIUNIT-CONFIG-005
 

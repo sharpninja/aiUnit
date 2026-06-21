@@ -174,7 +174,7 @@ CliFrontierClient temp workspace cleaned up after success | file=tests/SharpNinj
 
 ### TEST-AIUNIT-036
 
-AiUnitStrategyLoader finds bundled appsettings with all strategies | file=tests/SharpNinja.AiUnit.Tests/Strategy/AiUnitStrategyResolverTests.cs | method=TryLoad_FindsBundledAppsettings_WithAllStrategies
+AiUnitStrategyLoader finds bundled appsettings with all strategies, including grok-build CLI | file=tests/SharpNinja.AiUnit.Tests/Strategy/AiUnitStrategyResolverTests.cs | method=TryLoad_FindsBundledAppsettings_WithAllStrategies
 
 
 ### TEST-AIUNIT-037

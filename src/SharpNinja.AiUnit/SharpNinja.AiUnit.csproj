@@ -9,12 +9,12 @@
 		<PackageId>SharpNinja.aiUnit</PackageId>
 		<Authors>SharpNinja</Authors>
 		<Company>SharpNinja</Company>
-		<Description>xUnit extension for AI frontier-model regression testing. HTTP adapters (Anthropic, OpenAI-compatible, Gemini) + CLI strategies (claude, codex), strategy resolver, auto-skip when no strategy resolves.</Description>
+		<Description>xUnit extension for AI frontier-model regression testing. HTTP adapters (Anthropic, OpenAI-compatible, Gemini) + CLI strategies (claude, codex, Grok Build), strategy resolver, auto-skip when no strategy resolves.</Description>
 		<PackageProjectUrl>https://github.com/sharpninja/aiUnit</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/sharpninja/aiUnit</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageTags>xunit;ai;llm;frontier;testing;anthropic;openai;gemini;cli;claude;codex</PackageTags>
+		<PackageTags>xunit;ai;llm;frontier;testing;anthropic;openai;gemini;grok;xai;cli;claude;codex</PackageTags>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>

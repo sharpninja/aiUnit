@@ -76,6 +76,7 @@ public sealed class AiUnitStrategyResolverTests
 			Assert.Contains("codex-subscription", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("codex-api", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("copilot-gemini", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
+			Assert.Contains("grok-build", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 			Assert.Contains("gemini", config.Strategies.Keys, StringComparer.OrdinalIgnoreCase);
 		}
 		finally { Restore(snap); }
@@ -152,6 +153,26 @@ public sealed class AiUnitStrategyResolverTests
 			Assert.Equal(string.Empty, skipReason);
 			Assert.NotNull(client);
 			Assert.Equal("cli", resolved.Kind);
+		}
+		finally { Restore(snap); }
+	}
+
+	[Fact]
+	public void Build_GrokBuildCli_NoApiKeyNeeded_BuildsCliClient()
+	{
+		var snap = SnapshotAndClear();
+		try
+		{
+			var config = AiUnitStrategyLoader.TryLoad();
+			Assert.NotNull(config);
+			Assert.True(config!.Strategies.TryGetValue("grok-build", out var grokBuildCfg));
+			var (client, resolved, skipReason) = AiUnitStrategyResolver.Build("grok-build", grokBuildCfg);
+			Assert.Equal(string.Empty, skipReason);
+			Assert.NotNull(client);
+			Assert.Equal("cli", resolved.Kind);
+			Assert.Equal("grok-build", resolved.Model);
+			Assert.Equal("grok-build", client!.ModelVersion);
+			Assert.Equal("grok-build:grok", client.Provider);
 		}
 		finally { Restore(snap); }
 	}
