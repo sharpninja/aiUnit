@@ -173,7 +173,7 @@ internal static class Program
 
 		startInfo.ArgumentList.Add("--cwd");
 		startInfo.ArgumentList.Add(workspace);
-		var model = ResolveExplicitGrokCliModelOverride();
+		var model = ResolveModel();
 		if (!string.IsNullOrWhiteSpace(model))
 		{
 			startInfo.ArgumentList.Add("--model");
@@ -238,11 +238,15 @@ internal static class Program
 		}
 	}
 
-	private static string? ResolveExplicitGrokCliModelOverride()
+	private static string? ResolveModel()
 	{
-		// AIUNIT_MODEL is logical aiUnit strategy metadata. Only the
-		// provider-specific AIUNIT_GROK_MODEL variable may become grok --model.
-		var value = Environment.GetEnvironmentVariable("AIUNIT_GROK_MODEL")?.Trim();
+		var value = Environment.GetEnvironmentVariable("AIUNIT_MODEL")?.Trim();
+		if (IsConcreteModel(value))
+		{
+			return value;
+		}
+
+		value = Environment.GetEnvironmentVariable("AIUNIT_MODEL_VERSION")?.Trim();
 		return IsConcreteModel(value) ? value : null;
 	}
 
@@ -303,7 +307,7 @@ internal static class Program
 			arguments,
 			aiUnitModel = Environment.GetEnvironmentVariable("AIUNIT_MODEL"),
 			aiUnitModelVersion = Environment.GetEnvironmentVariable("AIUNIT_MODEL_VERSION"),
-			grokCliModel = ResolveExplicitGrokCliModelOverride(),
+			model = ResolveModel(),
 			startedUtc = startedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
 			endedUtc = endedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
 			processExitCode,
