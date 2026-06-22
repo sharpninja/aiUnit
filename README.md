@@ -118,7 +118,7 @@ strategy is resolved at process start and shared by all tests in the run.
       "grok-build": {
         "Kind": "cli",
         "Command": "SharpNinja.AiUnit.GrokBridge.exe",
-        "Model": "grok-4.3",
+        "Model": "grok-build",
         "TimeoutSeconds": 900,
         "Temperature": 0.0,
         "Description": "Grok Build CLI using the logged-in Grok account."
@@ -179,10 +179,9 @@ All config values can be overridden at run time:
 | `AIUNIT_TIMEOUT_SECONDS` | strategy `TimeoutSeconds` |
 | `AIUNIT_TEMPERATURE` | strategy `Temperature` |
 
-For `SharpNinja.AiUnit.GrokBridge.exe`, `AIUNIT_MODEL` remains logical aiUnit
-strategy metadata. The bridge only passes `grok --model` when
-`AIUNIT_GROK_MODEL` is set to a Grok CLI model id accepted by `grok models`
-such as `grok-build`.
+`SharpNinja.AiUnit.GrokBridge.exe` follows the same model contract as other
+strategies: the resolved strategy `Model`, or `AIUNIT_MODEL` override, is passed
+to Grok as `grok --model`.
 
 ### CLI-strategy setup
 
