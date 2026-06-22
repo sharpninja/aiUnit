@@ -23,9 +23,8 @@ public sealed class GrokBridgeTests
 			var envCapturePath = Path.Combine(diagnostics, "grok-env.txt");
 			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
 			process.StartInfo.ArgumentList.Add("Review type: code");
-			process.StartInfo.Environment["AIUNIT_MODEL"] = "grok-4.3";
-			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-4.3";
-			process.StartInfo.Environment["AIUNIT_GROK_MODEL"] = "grok-build";
+			process.StartInfo.Environment["AIUNIT_MODEL"] = "grok-build";
+			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-build";
 			process.StartInfo.Environment["AIUNIT_FAKE_GROK_ENV_PATH"] = envCapturePath;
 
 			Assert.True(process.Start(), "Expected Grok bridge process to start.");
@@ -46,13 +45,12 @@ public sealed class GrokBridgeTests
 			Assert.Equal(7, root.GetProperty("processExitCode").GetInt32());
 			Assert.Equal(7, root.GetProperty("returnedExitCode").GetInt32());
 			Assert.True(root.GetProperty("validReviewJson").GetBoolean());
-			Assert.Equal("grok-4.3", root.GetProperty("aiUnitModel").GetString());
-			Assert.Equal("grok-4.3", root.GetProperty("aiUnitModelVersion").GetString());
-			Assert.Equal("grok-build", root.GetProperty("grokCliModel").GetString());
+			Assert.Equal("grok-build", root.GetProperty("aiUnitModel").GetString());
+			Assert.Equal("grok-build", root.GetProperty("aiUnitModelVersion").GetString());
+			Assert.Equal("grok-build", root.GetProperty("model").GetString());
 			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
 			Assert.Contains("--model", arguments);
 			Assert.Contains("grok-build", arguments);
-			Assert.DoesNotContain("grok-4.3", arguments);
 
 			var envCapture = await File.ReadAllLinesAsync(envCapturePath);
 			Assert.Contains("GROK_CURSOR_MCPS_ENABLED=0", envCapture);
@@ -67,7 +65,7 @@ public sealed class GrokBridgeTests
 	}
 
 	[Fact]
-	public async Task Bridge_UsesCallerWorkspaceAndLeavesLogicalAiUnitModelToHarness_WhenSpecificWorkspaceEnvIsUnset()
+	public async Task Bridge_UsesCallerWorkspaceAndGenericAiUnitModel()
 	{
 		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
 		await File.WriteAllTextAsync(Path.Combine(workspace, "RiskyStars.sln"), string.Empty);
@@ -78,8 +76,8 @@ public sealed class GrokBridgeTests
 			using var process = CreateBridgeProcess(workspace: null, diagnostics: null, fakeGrok);
 			process.StartInfo.WorkingDirectory = workspace;
 			process.StartInfo.ArgumentList.Add("Review type: code");
-			process.StartInfo.Environment["AIUNIT_MODEL"] = "grok-4.3";
-			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-4.3";
+			process.StartInfo.Environment["AIUNIT_MODEL"] = "grok-build";
+			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-build";
 
 			Assert.True(process.Start(), "Expected Grok bridge process to start.");
 			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -100,14 +98,14 @@ public sealed class GrokBridgeTests
 			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
 			var root = metadata.RootElement;
 			Assert.Equal(workspace, root.GetProperty("workspace").GetString());
-			Assert.Equal("grok-4.3", root.GetProperty("aiUnitModel").GetString());
-			Assert.Equal("grok-4.3", root.GetProperty("aiUnitModelVersion").GetString());
-			Assert.Equal(JsonValueKind.Null, root.GetProperty("grokCliModel").ValueKind);
+			Assert.Equal("grok-build", root.GetProperty("aiUnitModel").GetString());
+			Assert.Equal("grok-build", root.GetProperty("aiUnitModelVersion").GetString());
+			Assert.Equal("grok-build", root.GetProperty("model").GetString());
 			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
 			Assert.Contains("--cwd", arguments);
 			Assert.Contains(workspace, arguments);
-			Assert.DoesNotContain("--model", arguments);
-			Assert.DoesNotContain("grok-4.3", arguments);
+			Assert.Contains("--model", arguments);
+			Assert.Contains("grok-build", arguments);
 		}
 		finally
 		{
@@ -144,7 +142,7 @@ public sealed class GrokBridgeTests
 			var root = metadata.RootElement;
 			Assert.Equal("grok-build", root.GetProperty("aiUnitModel").GetString());
 			Assert.Equal("grok-build", root.GetProperty("aiUnitModelVersion").GetString());
-			Assert.Equal("grok-build", root.GetProperty("grokCliModel").GetString());
+			Assert.Equal("grok-build", root.GetProperty("model").GetString());
 			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
 			Assert.Contains("--model", arguments);
 			Assert.Contains("grok-build", arguments);
@@ -157,7 +155,7 @@ public sealed class GrokBridgeTests
 	}
 
 	[Fact]
-	public async Task Bridge_DoesNotUseUnsupportedAiUnitModelAsGrokCliOverride()
+	public async Task Bridge_UsesGenericAiUnitModelOverrideEvenWhenItIsGrok43()
 	{
 		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
 		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
@@ -184,10 +182,10 @@ public sealed class GrokBridgeTests
 			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
 			var root = metadata.RootElement;
 			Assert.Equal("grok-4.3", root.GetProperty("aiUnitModel").GetString());
-			Assert.Equal(JsonValueKind.Null, root.GetProperty("grokCliModel").ValueKind);
+			Assert.Equal("grok-4.3", root.GetProperty("model").GetString());
 			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
-			Assert.DoesNotContain("--model", arguments);
-			Assert.DoesNotContain("grok-4.3", arguments);
+			Assert.Contains("--model", arguments);
+			Assert.Contains("grok-4.3", arguments);
 		}
 		finally
 		{
