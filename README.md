@@ -117,8 +117,8 @@ strategy is resolved at process start and shared by all tests in the run.
       },
       "grok-build": {
         "Kind": "cli",
-        "Command": "grok",
-        "Model": "grok-build",
+        "Command": "SharpNinja.AiUnit.GrokBridge.exe",
+        "Model": "grok-4.3",
         "TimeoutSeconds": 900,
         "Temperature": 0.0,
         "Description": "Grok Build CLI using the logged-in Grok account."
@@ -178,6 +178,11 @@ All config values can be overridden at run time:
 | `AIUNIT_API_KEY` | strategy `ApiKeyEnvVar` value |
 | `AIUNIT_TIMEOUT_SECONDS` | strategy `TimeoutSeconds` |
 | `AIUNIT_TEMPERATURE` | strategy `Temperature` |
+
+For `SharpNinja.AiUnit.GrokBridge.exe`, `AIUNIT_MODEL` remains logical aiUnit
+strategy metadata. The bridge only passes `grok --model` when
+`AIUNIT_GROK_MODEL` is set to a Grok CLI model id accepted by `grok models`
+such as `grok-build`.
 
 ### CLI-strategy setup
 
@@ -717,6 +722,7 @@ The `resultJson` parameter always conforms to `aiunit.review.findings.v1`:
   "runLog": {
     "path": "C:\\repo\\aiunit-results\\aiunit-review-code-20260530T120000.000Z.json",
     "url": "https://logs.example/runs/aiunit-review-code-20260530T120000.000Z.json",
+    "markdownPath": "C:\\repo\\aiunit-results\\aiunit-review-code-20260530T120000.000Z.md",
     "startedUtc": "2026-05-30T12:00:00.0000000+00:00"
   }
 }
@@ -727,8 +733,9 @@ The `resultJson` parameter always conforms to `aiunit.review.findings.v1`:
 | `status` | `pass` / `fail` / `error` | `pass` = no blocking findings; `fail` = issues found; `error` = review could not complete |
 | `severity` | `critical` / `high` / `medium` / `low` / `info` | Finding severity |
 | `category` | `correctness` / `security` / `performance` / `style` / `design` | Finding category |
-| `runLog.path` | local file path | Path to the persisted run log for this review run (always present) |
+| `runLog.path` | local file path | Path to the persisted JSON run log for this review run (always present) |
 | `runLog.url` | URL | Online link to the run log (present only when an online base URL is configured) |
+| `runLog.markdownPath` | local file path | Path to the human-readable Markdown companion of the run log (present when the file sink wrote one) |
 
 ### Run logs and the results directory
 
@@ -738,6 +745,14 @@ into its `resultJson`. Each file is named
 test, so files sort chronologically. The run log captures the review type, the
 effective prompt, the resolving agent(s), provider/model, latency, token usage,
 any error, and the full findings document.
+
+Alongside each JSON run log, the file sink also writes a human-readable Markdown
+companion with the same stem and a `.md` extension (for example
+`aiunit-review-code-20260530T120000.000Z.md`). The JSON file stays the canonical
+machine record; the Markdown companion renders the same run as headings, a
+metadata list, and fenced prompt/findings blocks for quick reading or online
+viewing. Its local path is surfaced as `runLog.markdownPath`. There is no online
+URL counterpart for the Markdown companion.
 
 Configure where results are written via the optional `Results` block in
 `appsettings.aiunit.json`:
@@ -762,6 +777,29 @@ Configure where results are written via the optional `Results` block in
 
 When `OnlineBaseUrl` is set, `runLog.url` is the base URL joined with the run-log
 file name.
+
+### Review attributes and test discovery (no AI calls at discovery)
+
+`[AiCodeReview]` / `[AiPlanReview]` / `[AiProjectReview]` are xUnit data
+attributes: the review runs when the data row is produced. aiUnit ships these
+attributes with a data discoverer that reports `SupportsDiscoveryEnumeration =
+false`, so xUnit does **not** call the review agent while it is *discovering*
+tests; the call happens only when the decorated test actually runs.
+
+For belt-and-suspenders protection across runners, set `preEnumerateTheories` to
+`false` in an `xunit.runner.json` copied to your test project's output directory:
+
+```json
+{
+  "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+  "preEnumerateTheories": false
+}
+```
+
+This guarantees no review (and therefore no frontier-model/AI call) is triggered
+merely by discovering the assembly in an IDE or CI test-explorer pass. On xUnit
+v3 the same effect is also available per test via
+`[Theory(DisableDiscoveryEnumeration = true)]`.
 
 ---
 

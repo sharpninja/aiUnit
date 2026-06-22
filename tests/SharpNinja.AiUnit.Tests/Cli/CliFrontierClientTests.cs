@@ -334,6 +334,27 @@ public sealed class CliFrontierClientTests
 	}
 
 	[Fact]
+	public async Task SendAsync_UnknownCommand_ExposesConcreteModelToWrapperEnvironment()
+	{
+		ProcessStartInfo? capturedPsi = null;
+		var runner = Substitute.For<IProcessRunner>();
+		runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<string?>(),
+			Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+			.Returns(ci =>
+			{
+				capturedPsi = ci.ArgAt<ProcessStartInfo>(0);
+				return new ProcessExecutionResult(0, "unknown-cli output", "", false);
+			});
+
+		var client = BuildClient(runner, command: "my-custom-llm", model: "grok-4.3");
+		await client.SendAsync(BuildRequest());
+
+		Assert.NotNull(capturedPsi);
+		Assert.Equal("grok-4.3", capturedPsi!.Environment["AIUNIT_MODEL"]);
+		Assert.Equal("grok-4.3", capturedPsi.Environment["AIUNIT_MODEL_VERSION"]);
+	}
+
+	[Fact]
 	public async Task SendAsync_TempWorkspace_CleanedUpAfterSuccess()
 	{
 		string? tempDirSeen = null;

@@ -48,10 +48,16 @@ internal sealed class FileAiReviewRunLogSink : IAiReviewRunLogSink
 		var path = ResolveNonCollidingPath(fileName);
 		File.WriteAllText(path, Serialize(entry));
 
+		// Human-readable Markdown companion: same stem, .md extension. The JSON
+		// file remains the canonical machine record; the companion is best-effort
+		// alongside it. The path mirrors the resolved (collision-safe) JSON stem.
+		var markdownPath = Path.ChangeExtension(path, ".md");
+		File.WriteAllText(markdownPath, AiReviewRunLogMarkdown.Render(entry));
+
 		var url = _onlineBaseUrl is null
 			? null
 			: CombineUrl(_onlineBaseUrl, Path.GetFileName(path));
-		return new AiReviewRunLogRef(path, url, entry.StartedUtc);
+		return new AiReviewRunLogRef(path, url, entry.StartedUtc, markdownPath);
 	}
 
 	private string ResolveNonCollidingPath(string fileName)

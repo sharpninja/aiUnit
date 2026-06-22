@@ -12,6 +12,7 @@ namespace SharpNinja.AiUnit.Review;
 /// result JSON as the second parameter.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
+[DataDiscoverer("SharpNinja.AiUnit.Review.AiReviewDataDiscoverer", "SharpNinja.AiUnit")]
 public abstract class AiReviewAttribute : DataAttribute
 {
 	private readonly AiReviewKind _reviewKind;

@@ -170,9 +170,9 @@ public sealed class AiUnitStrategyResolverTests
 			Assert.Equal(string.Empty, skipReason);
 			Assert.NotNull(client);
 			Assert.Equal("cli", resolved.Kind);
-			Assert.Equal("grok-build", resolved.Model);
-			Assert.Equal("grok-build", client!.ModelVersion);
-			Assert.Equal("grok-build:grok", client.Provider);
+			Assert.Equal("grok-4.3", resolved.Model);
+			Assert.Equal("grok-4.3", client!.ModelVersion);
+			Assert.Equal("grok-build:SharpNinja.AiUnit.GrokBridge.exe", client.Provider);
 		}
 		finally { Restore(snap); }
 	}

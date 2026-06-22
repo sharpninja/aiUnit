@@ -224,6 +224,12 @@ public sealed class CliFrontierClient : IFrontierModelClient
 			StandardErrorEncoding = Encoding.UTF8,
 		};
 
+		if (IsConcreteModel(_modelVersion))
+		{
+			psi.Environment["AIUNIT_MODEL"] = _modelVersion;
+			psi.Environment["AIUNIT_MODEL_VERSION"] = _modelVersion;
+		}
+
 		switch (cmdLower)
 		{
 			case "claude":

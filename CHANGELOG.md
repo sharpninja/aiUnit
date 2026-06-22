@@ -26,6 +26,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `AiUnitResultsOptions`, `AiUnitResultsLocator`, and `AiReviewRunLogRef` public
   types; optional `runLog` property added to the `aiunit.review.findings.v1`
   schema.
+- **Markdown run-log companion**: the file sink now writes a human-readable
+  Markdown rendering next to each JSON run log (same stem, `.md` extension). The
+  JSON file remains the canonical machine record. `AiReviewRunLogRef` gains a
+  local `MarkdownPath`, surfaced in the review `resultJson` as
+  `runLog.markdownPath` (no online URL counterpart).
+- **Discovery gate**: documented that review attributes never trigger AI calls at
+  test-discovery time, with `preEnumerateTheories:false` (`xunit.runner.json`) as
+  the assembly-wide switch; the aiUnit test project now ships that config.
 
 ---
 

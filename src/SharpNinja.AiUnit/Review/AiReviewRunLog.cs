@@ -12,7 +12,16 @@ namespace SharpNinja.AiUnit.Review;
 /// <param name="Path">Local filesystem path to the run-log result file.</param>
 /// <param name="Url">Optional online URL to the run log (when a base URL is configured).</param>
 /// <param name="StartedUtc">UTC start time of the review run.</param>
-public sealed record AiReviewRunLogRef(string Path, string? Url, DateTimeOffset StartedUtc);
+/// <param name="MarkdownPath">
+/// Optional local filesystem path to the human-readable Markdown companion of
+/// the run log (same stem as <see cref="Path"/> with a <c>.md</c> extension).
+/// There is no online URL counterpart for the Markdown companion.
+/// </param>
+public sealed record AiReviewRunLogRef(
+	string Path,
+	string? Url,
+	DateTimeOffset StartedUtc,
+	string? MarkdownPath = null);
 
 /// <summary>
 /// Captured record of a single review run, serialized by an

@@ -69,6 +69,7 @@ public static class AiReviewPrompts
 		$"""
 		You are performing an aiUnit {ReviewTypeName(kind)} review.
 		Return only JSON matching this schema. Do not wrap the JSON in markdown.
+		The optional runLog field is owned by aiUnit and may be injected after your response; do not fabricate runLog paths.
 		Schema:
 		{AiReviewFindingsSchema.JsonSchema}
 		""";

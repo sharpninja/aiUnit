@@ -6,6 +6,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpNinja.AiUnit", "src\Sh
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpNinja.AiUnit.Repl", "src\SharpNinja.AiUnit.Repl\SharpNinja.AiUnit.Repl.csproj", "{C0F4E101-4444-4111-8A11-CCCCCCCCCCCC}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpNinja.AiUnit.GrokBridge", "src\SharpNinja.AiUnit.GrokBridge\SharpNinja.AiUnit.GrokBridge.csproj", "{D0F4E101-5555-4111-8A11-DDDDDDDDDDDD}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpNinja.AiUnit.Tests", "tests\SharpNinja.AiUnit.Tests\SharpNinja.AiUnit.Tests.csproj", "{B0F4E101-3333-4111-8A11-BBBBBBBBBBBB}"
 EndProject
 Global
@@ -22,6 +24,10 @@ Global
 		{C0F4E101-4444-4111-8A11-CCCCCCCCCCCC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C0F4E101-4444-4111-8A11-CCCCCCCCCCCC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C0F4E101-4444-4111-8A11-CCCCCCCCCCCC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D0F4E101-5555-4111-8A11-DDDDDDDDDDDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0F4E101-5555-4111-8A11-DDDDDDDDDDDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0F4E101-5555-4111-8A11-DDDDDDDDDDDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0F4E101-5555-4111-8A11-DDDDDDDDDDDD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B0F4E101-3333-4111-8A11-BBBBBBBBBBBB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B0F4E101-3333-4111-8A11-BBBBBBBBBBBB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B0F4E101-3333-4111-8A11-BBBBBBBBBBBB}.Release|Any CPU.ActiveCfg = Release|Any CPU

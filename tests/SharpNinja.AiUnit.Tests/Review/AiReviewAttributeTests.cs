@@ -104,6 +104,7 @@ public sealed class AiReviewAttributeTests
 			var prompt = AiReviewPrompts.CannedPrompt(kind);
 
 			Assert.Contains("Return only JSON matching this schema.", prompt, StringComparison.Ordinal);
+			Assert.Contains("runLog field is owned by aiUnit", AiReviewPrompts.BuildSystemPrompt(kind), StringComparison.Ordinal);
 			Assert.Contains("\"$schema\": \"https://json-schema.org/draft/2020-12/schema\"", prompt, StringComparison.Ordinal);
 			Assert.Contains(AiReviewFindingsSchema.SchemaVersion, prompt, StringComparison.Ordinal);
 			Assert.Contains("\"reviewType\": { \"type\": \"string\", \"enum\": [\"code\", \"plan\", \"project\"] }", prompt, StringComparison.Ordinal);
@@ -136,6 +137,14 @@ public sealed class AiReviewAttributeTests
 	}
 
 	[Fact]
+	public void ReviewAttributes_DisableDiscoveryEnumeration()
+	{
+		var discoverer = new AiReviewDataDiscoverer();
+
+		Assert.False(discoverer.SupportsDiscoveryEnumeration(null!, null!));
+	}
+
+	[Fact]
 	public void Attribute_CreatesTwoParameterDataRow()
 	{
 		var resolver = new FakeResolver();
@@ -153,6 +162,89 @@ public sealed class AiReviewAttributeTests
 		Assert.Equal(0, resolver.DefaultClient.Requests[0].Temperature);
 		Assert.NotNull(resolver.DefaultClient.Requests[0].Tools);
 		Assert.Equal(AiReviewFindingsSchema.JsonSchema, resolver.DefaultClient.Requests[0].Tools![0].JsonSchema);
+	}
+
+	[Fact]
+	public async Task Executor_ResponseMatchingSchema_ReturnsProviderJson()
+	{
+		var resolver = new FakeResolver();
+		resolver.DefaultClient.ResponseFactory = _ => ReviewJson("default", "schema valid");
+		var request = new AiReviewExecutionRequest(AiReviewKind.Code, "Review the diff.", Array.Empty<AiReviewAgentSpec>());
+
+		var result = await AiReviewExecutor.ExecuteAsync(request, resolver, new RecordingRunLogSink(@"C:\runs\schema-valid.json", null));
+
+		using var doc = JsonDocument.Parse(result);
+		Assert.Equal("pass", doc.RootElement.GetProperty("status").GetString());
+		Assert.Equal("schema valid", doc.RootElement.GetProperty("summary").GetString());
+		Assert.True(doc.RootElement.TryGetProperty("runLog", out _));
+	}
+
+	[Theory]
+	[MemberData(nameof(InvalidReviewResponses))]
+	public async Task Executor_ResponseThatDoesNotMatchSchema_ReturnsSchemaValidationError(
+		string responseJson,
+		string expectedDetailFragment)
+	{
+		var resolver = new FakeResolver();
+		resolver.DefaultClient.ResponseFactory = _ => responseJson;
+		var request = new AiReviewExecutionRequest(AiReviewKind.Code, "Review the diff.", Array.Empty<AiReviewAgentSpec>());
+
+		var result = await AiReviewExecutor.ExecuteAsync(request, resolver, new RecordingRunLogSink(@"C:\runs\schema-invalid.json", null));
+
+		using var doc = JsonDocument.Parse(result);
+		var root = doc.RootElement;
+		Assert.Equal(AiReviewFindingsSchema.SchemaVersion, root.GetProperty("schemaVersion").GetString());
+		Assert.Equal("code", root.GetProperty("reviewType").GetString());
+		Assert.Equal("error", root.GetProperty("status").GetString());
+		Assert.Contains("schema validation", root.GetProperty("summary").GetString(), StringComparison.OrdinalIgnoreCase);
+		Assert.False(root.TryGetProperty("foo", out _));
+		var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+		Assert.Equal("review-execution", finding.GetProperty("category").GetString());
+		Assert.Contains("schema-valid", finding.GetProperty("title").GetString(), StringComparison.OrdinalIgnoreCase);
+		Assert.Contains(expectedDetailFragment, finding.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Theory]
+	[InlineData("anthropic")]
+	[InlineData("openai")]
+	[InlineData("xai")]
+	[InlineData("google")]
+	[InlineData("grok-build:grok")]
+	public async Task Executor_InvalidSchemaJson_FromAnyStrategyProvider_ReturnsSchemaValidationError(string provider)
+	{
+		var resolver = new FakeResolver
+		{
+			DefaultClient = new FakeFrontierClient(provider, _ => """{"foo":"bar"}"""),
+		};
+		var request = new AiReviewExecutionRequest(AiReviewKind.Code, "Review the diff.", Array.Empty<AiReviewAgentSpec>());
+
+		var result = await AiReviewExecutor.ExecuteAsync(request, resolver, new RecordingRunLogSink(@"C:\runs\schema-provider.json", null));
+
+		using var doc = JsonDocument.Parse(result);
+		var root = doc.RootElement;
+		Assert.Equal("error", root.GetProperty("status").GetString());
+		Assert.Equal(provider, root.GetProperty("agent").GetProperty("provider").GetString());
+		Assert.Contains("schema validation", root.GetProperty("summary").GetString(), StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("foo", root.GetProperty("summary").GetString(), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task Executor_ProviderErrorWithValidSchemaText_ReturnsTransportError()
+	{
+		var resolver = new FakeResolver();
+		resolver.DefaultClient.ResponseFactory = _ => ReviewJson("default", "would otherwise pass");
+		resolver.DefaultClient.Error = new FrontierError("cli_exit", "Process exited with code 7.", 7);
+		var request = new AiReviewExecutionRequest(AiReviewKind.Code, "Review the diff.", Array.Empty<AiReviewAgentSpec>());
+
+		var result = await AiReviewExecutor.ExecuteAsync(request, resolver, new RecordingRunLogSink(@"C:\runs\transport-error.json", null));
+
+		using var doc = JsonDocument.Parse(result);
+		var root = doc.RootElement;
+		Assert.Equal("error", root.GetProperty("status").GetString());
+		Assert.Contains("Process exited with code 7.", root.GetProperty("summary").GetString(), StringComparison.Ordinal);
+		var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+		Assert.Contains("Process exited with code 7.", finding.GetProperty("detail").GetString(), StringComparison.Ordinal);
+		Assert.Contains("would otherwise pass", finding.GetProperty("detail").GetString(), StringComparison.Ordinal);
 	}
 
 	[Fact]
@@ -221,9 +313,74 @@ public sealed class AiReviewAttributeTests
 		}
 		""";
 
+	public static IEnumerable<object[]> InvalidReviewResponses()
+	{
+		yield return new object[] { "{}", "schemaVersion" };
+		yield return new object[]
+		{
+			"""
+			{
+			  "schemaVersion": "wrong",
+			  "reviewType": "code",
+			  "status": "pass",
+			  "summary": "ok",
+			  "findings": []
+			}
+			""",
+			"schemaVersion",
+		};
+		yield return new object[]
+		{
+			$$"""
+			{
+			  "schemaVersion": "{{AiReviewFindingsSchema.SchemaVersion}}",
+			  "reviewType": "invalid",
+			  "status": "pass",
+			  "summary": "ok",
+			  "findings": []
+			}
+			""",
+			"reviewType",
+		};
+		yield return new object[]
+		{
+			$$"""
+			{
+			  "schemaVersion": "{{AiReviewFindingsSchema.SchemaVersion}}",
+			  "reviewType": "code",
+			  "status": "pass",
+			  "summary": "ok",
+			  "findings": [
+			    {
+			      "severity": "bogus",
+			      "title": "bad",
+			      "detail": "bad",
+			      "recommendation": "fix"
+			    }
+			  ]
+			}
+			""",
+			"severity",
+		};
+		yield return new object[]
+		{
+			$$"""
+			{
+			  "schemaVersion": "{{AiReviewFindingsSchema.SchemaVersion}}",
+			  "reviewType": "code",
+			  "status": "pass",
+			  "summary": "ok",
+			  "findings": [],
+			  "extra": true
+			}
+			""",
+			"unsupported property 'extra'",
+		};
+	}
+
 	private sealed class FakeResolver : IAiReviewClientResolver
 	{
-		public FakeFrontierClient DefaultClient { get; } = new("default", _ => ReviewJson("default"));
+		public FakeFrontierClient DefaultClient { get; set; } = new("default", _ => ReviewJson("default"));
 
 		public Dictionary<string, FakeFrontierClient> Clients { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -252,6 +409,8 @@ public sealed class AiReviewAttributeTests
 
 		public Func<FrontierRequest, string> ResponseFactory { get; set; }
 
+		public FrontierError? Error { get; set; }
+
 		public List<FrontierRequest> Requests { get; } = [];
 
 		public Task<FrontierResponse> SendAsync(
@@ -267,7 +426,7 @@ public sealed class AiReviewAttributeTests
 				Provider,
 				ModelVersion,
 				EstimatedCostUsd: null,
-				Error: null));
+				Error: Error));
 		}
 	}
 }

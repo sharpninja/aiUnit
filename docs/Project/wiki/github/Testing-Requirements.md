@@ -337,6 +337,17 @@ Unit tests: AiReviewJson.InjectRunLog adds runLog to a valid review object and p
 BuildVersioningTests verifies automatic build-number package suffixing, explicit Version overrides, stable build-number sanitization, latest-package redeploy selection, and disabled GitVersion property overwrites. ProgramCommandLineTests and redeploy smoke validation cover aiunit-review --help, --version, and --probe-exit so deployed global-tool builds can be identified and launched without Avalonia startup side effects.
 
 
+### TEST-AIUNIT-070
+
+All supported aiUnit AI provider adapters and review strategies must have deterministic provider-specific edge-case coverage, not only Grok Build. Coverage must include CLI providers such as Grok Build, Codex, Claude, Copilot/custom CLI, and HTTP providers such as OpenAI-compatible/xAI/MAF/OpenAI, Anthropic, and Gemini.
+
+**Acceptance Criteria:**
+- [ ] CLI-provider tests cover nonzero exit with valid stdout, zero exit with empty or non-JSON stdout, noisy stdout or stderr, timeout or cancellation, stderr diagnostics, and command/argument construction for each CLI strategy.
+- [ ] CLI-provider tests prove only the expected provider result schema is extracted or treated as success, and arbitrary JSON or prose is surfaced as a harness/provider error with diagnostics.
+- [ ] HTTP-provider tests cover authentication failures, 4xx/5xx/rate limits, malformed JSON, missing required fields, code-fenced JSON, timeout or cancellation, and provider-specific error envelopes.
+- [ ] The deterministic suite includes a provider matrix for Grok Build, Codex, Claude, Copilot/custom CLI, OpenAI-compatible/xAI/MAF/OpenAI, Anthropic, and Gemini, with documented rationale for any excluded edge.
+- [ ] Required tests use local fakes or doubles and do not call live providers; live-provider smoke tests are explicit opt-in gates.
+
 
 ## TEST-AIUNIT-RESILIENCE
 

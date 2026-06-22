@@ -191,6 +191,7 @@ Traceability policy: see `Requirements-Traceability-Policy.md`.
 | TEST-AIUNIT-067 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-068 | Tracked | Testing-Requirements.md |
 | TEST-AIUNIT-069 | Tracked | Testing-Requirements.md |
+| TEST-AIUNIT-070 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-001 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-002 | Tracked | Testing-Requirements.md |
 | TEST-AIUNITDESKTOP-003 | Tracked | Testing-Requirements.md |
