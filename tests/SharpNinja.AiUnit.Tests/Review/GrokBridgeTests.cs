@@ -357,22 +357,21 @@ public sealed class GrokBridgeTests
 	}
 
 	[Fact]
-	public async Task Bridge_PassesGrokMcpConfig_WhenConfigured()
+	public async Task Bridge_PassesDisallowedTools_WhenConfigured()
 	{
-		// WS-C: AIUNIT_GROK_MCP_CONFIG is forwarded as `--mcp-config <path>` so a
-		// harness can suppress OAuth-prompting Grok plugins via Grok's own config.
+		// WS-C: AIUNIT_GROK_DISALLOWED_TOOLS is forwarded as `--disallowed-tools <list>`
+		// (a real Grok headless flag) so a harness can strip tools from a review.
 		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
 		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
 		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
 
 		try
 		{
-			var mcpConfigPath = Path.Combine(workspace, "grok-mcp-empty.json");
-			await File.WriteAllTextAsync(mcpConfigPath, "{}");
+			const string denylist = "run_terminal_cmd,web_search,web_fetch";
 
 			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
 			process.StartInfo.ArgumentList.Add("Review type: code");
-			process.StartInfo.Environment["AIUNIT_GROK_MCP_CONFIG"] = mcpConfigPath;
+			process.StartInfo.Environment["AIUNIT_GROK_DISALLOWED_TOOLS"] = denylist;
 
 			Assert.True(process.Start(), "Expected Grok bridge process to start.");
 			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -384,8 +383,8 @@ public sealed class GrokBridgeTests
 			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
 			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
 			var arguments = metadata.RootElement.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
-			Assert.Contains("--mcp-config", arguments);
-			Assert.Contains(mcpConfigPath, arguments);
+			Assert.Contains("--disallowed-tools", arguments);
+			Assert.Contains(denylist, arguments);
 		}
 		finally
 		{
@@ -395,7 +394,7 @@ public sealed class GrokBridgeTests
 	}
 
 	[Fact]
-	public async Task Bridge_OmitsMcpConfig_WhenUnset()
+	public async Task Bridge_OmitsDisallowedTools_WhenUnset()
 	{
 		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
 		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
@@ -405,7 +404,7 @@ public sealed class GrokBridgeTests
 		{
 			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
 			process.StartInfo.ArgumentList.Add("Review type: code");
-			process.StartInfo.Environment.Remove("AIUNIT_GROK_MCP_CONFIG");
+			process.StartInfo.Environment.Remove("AIUNIT_GROK_DISALLOWED_TOOLS");
 
 			Assert.True(process.Start(), "Expected Grok bridge process to start.");
 			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -417,7 +416,7 @@ public sealed class GrokBridgeTests
 			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
 			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
 			var arguments = metadata.RootElement.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
-			Assert.DoesNotContain("--mcp-config", arguments);
+			Assert.DoesNotContain("--disallowed-tools", arguments);
 		}
 		finally
 		{

@@ -184,15 +184,17 @@ internal static class Program
 		startInfo.ArgumentList.Add("--output-format");
 		startInfo.ArgumentList.Add("plain");
 
-		// Optional Grok MCP config passthrough. The bundled disable env vars do not
-		// suppress every Grok plugin (e.g. an OAuth-prompting `mcpserver` plugin),
-		// so a harness can point Grok at a config that excludes those plugins via
-		// AIUNIT_GROK_MCP_CONFIG -> `--mcp-config <path>`. Opt-in: no default change.
-		var mcpConfig = Environment.GetEnvironmentVariable("AIUNIT_GROK_MCP_CONFIG");
-		if (!string.IsNullOrWhiteSpace(mcpConfig))
+		// Optional headless tool denylist passthrough. Grok's run command has no
+		// per-run MCP/plugin disable flag (MCP servers are configured via the
+		// `grok mcp` subcommand / `[plugins]` in grok config, not a run flag), but
+		// `--disallowed-tools` strips built-in tools from a headless review (e.g.
+		// "run_terminal_cmd,web_search,web_fetch"). Opt-in via
+		// AIUNIT_GROK_DISALLOWED_TOOLS; no default change.
+		var disallowedTools = Environment.GetEnvironmentVariable("AIUNIT_GROK_DISALLOWED_TOOLS");
+		if (!string.IsNullOrWhiteSpace(disallowedTools))
 		{
-			startInfo.ArgumentList.Add("--mcp-config");
-			startInfo.ArgumentList.Add(mcpConfig);
+			startInfo.ArgumentList.Add("--disallowed-tools");
+			startInfo.ArgumentList.Add(disallowedTools);
 		}
 
 		var permissionMode = Environment.GetEnvironmentVariable("AIUNIT_GROK_PERMISSION_MODE");
