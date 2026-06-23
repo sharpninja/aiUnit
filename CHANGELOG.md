@@ -36,6 +36,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
   run concurrently in a single test runner regardless of test layout. New public
   `AiReviewCollection` (`[Collection(AiReviewCollection.Name)]`,
   `DisableParallelization = true`) for xUnit-idiomatic serial ordering.
+- **Grok bridge MCP config passthrough**: optional `AIUNIT_GROK_MCP_CONFIG`
+  forwards `--mcp-config <path>` to Grok so a review harness can suppress
+  OAuth-prompting Grok plugins via Grok's own config (opt-in; no default change).
 - **Discovery gate**: documented that review attributes never trigger AI calls at
   test-discovery time, with `preEnumerateTheories:false` (`xunit.runner.json`) as
   the assembly-wide switch; the aiUnit test project now ships that config.

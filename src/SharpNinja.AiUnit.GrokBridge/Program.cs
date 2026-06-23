@@ -184,6 +184,17 @@ internal static class Program
 		startInfo.ArgumentList.Add("--output-format");
 		startInfo.ArgumentList.Add("plain");
 
+		// Optional Grok MCP config passthrough. The bundled disable env vars do not
+		// suppress every Grok plugin (e.g. an OAuth-prompting `mcpserver` plugin),
+		// so a harness can point Grok at a config that excludes those plugins via
+		// AIUNIT_GROK_MCP_CONFIG -> `--mcp-config <path>`. Opt-in: no default change.
+		var mcpConfig = Environment.GetEnvironmentVariable("AIUNIT_GROK_MCP_CONFIG");
+		if (!string.IsNullOrWhiteSpace(mcpConfig))
+		{
+			startInfo.ArgumentList.Add("--mcp-config");
+			startInfo.ArgumentList.Add(mcpConfig);
+		}
+
 		var permissionMode = Environment.GetEnvironmentVariable("AIUNIT_GROK_PERMISSION_MODE");
 		if (!string.IsNullOrWhiteSpace(permissionMode)
 			&& !string.Equals(permissionMode, "none", StringComparison.OrdinalIgnoreCase))

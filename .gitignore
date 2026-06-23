@@ -47,3 +47,8 @@ tmp-seed-requirements/
 
 # Nuke build temps (logs, attempts)
 .nuke/temp/
+
+# aiUnit review outputs / scratch
+aiunit-results/
+aiunit-review-output.json
+AGENTS-README-FIRST.yaml.deleted-*

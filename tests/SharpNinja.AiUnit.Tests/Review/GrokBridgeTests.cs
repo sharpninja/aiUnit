@@ -356,6 +356,76 @@ public sealed class GrokBridgeTests
 		}
 	}
 
+	[Fact]
+	public async Task Bridge_PassesGrokMcpConfig_WhenConfigured()
+	{
+		// WS-C: AIUNIT_GROK_MCP_CONFIG is forwarded as `--mcp-config <path>` so a
+		// harness can suppress OAuth-prompting Grok plugins via Grok's own config.
+		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
+		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
+		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
+
+		try
+		{
+			var mcpConfigPath = Path.Combine(workspace, "grok-mcp-empty.json");
+			await File.WriteAllTextAsync(mcpConfigPath, "{}");
+
+			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
+			process.StartInfo.ArgumentList.Add("Review type: code");
+			process.StartInfo.Environment["AIUNIT_GROK_MCP_CONFIG"] = mcpConfigPath;
+
+			Assert.True(process.Start(), "Expected Grok bridge process to start.");
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+			await process.StandardError.ReadToEndAsync(timeout.Token);
+			await process.WaitForExitAsync(timeout.Token);
+			await stdoutTask;
+
+			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
+			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
+			var arguments = metadata.RootElement.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+			Assert.Contains("--mcp-config", arguments);
+			Assert.Contains(mcpConfigPath, arguments);
+		}
+		finally
+		{
+			TryDeleteDirectory(workspace);
+			TryDeleteDirectory(diagnostics);
+		}
+	}
+
+	[Fact]
+	public async Task Bridge_OmitsMcpConfig_WhenUnset()
+	{
+		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
+		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
+		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
+
+		try
+		{
+			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
+			process.StartInfo.ArgumentList.Add("Review type: code");
+			process.StartInfo.Environment.Remove("AIUNIT_GROK_MCP_CONFIG");
+
+			Assert.True(process.Start(), "Expected Grok bridge process to start.");
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+			await process.StandardError.ReadToEndAsync(timeout.Token);
+			await process.WaitForExitAsync(timeout.Token);
+			await stdoutTask;
+
+			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
+			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
+			var arguments = metadata.RootElement.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+			Assert.DoesNotContain("--mcp-config", arguments);
+		}
+		finally
+		{
+			TryDeleteDirectory(workspace);
+			TryDeleteDirectory(diagnostics);
+		}
+	}
+
 	private static Process CreateBridgeProcess(string? workspace, string? diagnostics, string fakeGrok)
 	{
 		var bridge = ResolveBridgeExecutable();
