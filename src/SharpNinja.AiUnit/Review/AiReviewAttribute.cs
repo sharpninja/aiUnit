@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using Xunit;
 using Xunit.Sdk;
+using Xunit.v3;
 
 namespace SharpNinja.AiUnit.Review;
 
@@ -12,7 +15,6 @@ namespace SharpNinja.AiUnit.Review;
 /// result JSON as the second parameter.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-[DataDiscoverer("SharpNinja.AiUnit.Review.AiReviewDataDiscoverer", "SharpNinja.AiUnit")]
 public abstract class AiReviewAttribute : DataAttribute
 {
 	private readonly AiReviewKind _reviewKind;
@@ -56,11 +58,23 @@ public abstract class AiReviewAttribute : DataAttribute
 	public int MaxTokens { get; set; }
 
 	/// <inheritdoc />
-	public override IEnumerable<object[]> GetData(MethodInfo testMethod)
+	public override ValueTask<IReadOnlyCollection<ITheoryDataRow>> GetData(
+		MethodInfo testMethod,
+		DisposalTracker disposalTracker)
 	{
 		_ = testMethod;
-		yield return GetData(new DefaultAiReviewClientResolver());
+		_ = disposalTracker;
+		var values = GetData(new DefaultAiReviewClientResolver());
+		IReadOnlyCollection<ITheoryDataRow> rows = [new TheoryDataRow(values)];
+		return new ValueTask<IReadOnlyCollection<ITheoryDataRow>>(rows);
 	}
+
+	/// <summary>
+	/// Reviews must never run during discovery (that would execute the agent
+	/// while xUnit enumerates tests), so discovery enumeration is disabled and
+	/// the data row is produced only when the decorated test runs.
+	/// </summary>
+	public override bool SupportsDiscoveryEnumeration() => false;
 
 	internal object[] GetData(IAiReviewClientResolver resolver, IAiReviewRunLogSink? sink = null)
 	{

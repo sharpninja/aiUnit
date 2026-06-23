@@ -91,12 +91,11 @@ public class AiAttributeIntegrationTests
 	}
 
 	/// <summary>
-	/// AiTheory must inherit from <see cref="global::Xunit.SkippableTheoryAttribute"/>
-	/// so that per-row <c>Skip.If</c> calls (using
-	/// <see cref="AiSkip.IfNoStrategy"/>) still control row-level skipping
-	/// when the attribute itself is not auto-skipping. The attribute itself
-	/// only sets Skip in the ctor when the fixture has no strategy at
-	/// discovery time.
+	/// AiTheory must inherit from <see cref="global::Xunit.TheoryAttribute"/>
+	/// so that per-row dynamic skips (using <see cref="AiSkip.IfNoStrategy"/>)
+	/// still control row-level skipping when the attribute itself is not
+	/// auto-skipping. The attribute itself only sets Skip in the ctor when the
+	/// fixture has no strategy at discovery time.
 	/// </summary>
 	[Fact]
 	public void AiTheory_PerRowSkipStillUsesSkipIf()
@@ -104,11 +103,11 @@ public class AiAttributeIntegrationTests
 		var attr = new AiTheoryAttribute();
 		var baseType = typeof(AiTheoryAttribute).BaseType;
 		Assert.NotNull(baseType);
-		Assert.Equal("SkippableTheoryAttribute", baseType!.Name);
+		Assert.Equal("TheoryAttribute", baseType!.Name);
 
 		// AiSkip.IfNoStrategy is the per-test gate: when the fixture has not
-		// resolved, it calls Xunit.Skip.If; when resolved, it is a no-op.
-		// We just verify the method exists with the expected shape so
+		// resolved, it performs an xUnit v3 dynamic skip; when resolved, it is a
+		// no-op. We just verify the method exists with the expected shape so
 		// MemberData rows can call it freely.
 		var method = typeof(AiSkip).GetMethod(
 			nameof(AiSkip.IfNoStrategy),

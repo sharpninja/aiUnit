@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING: migrated to xUnit v3.** The package now targets `xunit.v3`
+  (`xunit.v3.extensibility.core`) and drops `Xunit.SkippableFact`. `[AiFact]` /
+  `[AiTheory]` derive from the native v3 `FactAttribute` / `TheoryAttribute`
+  (native `Skip`, and `[Theory(DisableDiscoveryEnumeration = true)]`); `AiSkip`
+  uses the v3 dynamic-skip token; `AiReviewAttribute` implements the v3 async
+  `GetData(MethodInfo, DisposalTracker)` and `SupportsDiscoveryEnumeration()`
+  directly (the separate `AiReviewDataDiscoverer` is removed). **Consumer test
+  projects must also be on xUnit v3** (reference `xunit.v3` +
+  `xunit.runner.visualstudio` 3.x). Version bumped to 1.0.0.
+
 ### Added
 - **Review run logs**: every review now persists a run-log result file (review
   type, effective prompt, resolving agent(s), provider/model, latency, token
@@ -31,6 +42,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
   JSON file remains the canonical machine record. `AiReviewRunLogRef` gains a
   local `MarkdownPath`, surfaced in the review `resultJson` as
   `runLog.markdownPath` (no online URL counterpart).
+- **Serialized reviews**: `[AiCodeReview]`/`[AiPlanReview]`/`[AiProjectReview]`
+  are now serialized at the agent call by a process-wide gate, so reviews never
+  run concurrently in a single test runner regardless of test layout. New public
+  `AiReviewCollection` (`[Collection(AiReviewCollection.Name)]`,
+  `DisableParallelization = true`) for xUnit-idiomatic serial ordering.
+- **Grok bridge tool-denylist passthrough**: optional `AIUNIT_GROK_DISALLOWED_TOOLS`
+  forwards `--disallowed-tools <list>` to a headless Grok review (opt-in; no
+  default change). Grok 0.2.60 has no per-run MCP/plugin disable flag, so the
+  OAuth-prompting `mcpserver` plugin must be disabled in Grok config
+  (`grok mcp remove mcpserver` or `[plugins] disabled`).
 - **Discovery gate**: documented that review attributes never trigger AI calls at
   test-discovery time, with `preEnumerateTheories:false` (`xunit.runner.json`) as
   the assembly-wide switch; the aiUnit test project now ships that config.

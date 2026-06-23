@@ -2,19 +2,23 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
+		<OutputType>Exe</OutputType>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<IsPackable>false</IsPackable>
 		<RootNamespace>SharpNinja.AiUnit.Tests</RootNamespace>
 		<AssemblyName>SharpNinja.AiUnit.Tests</AssemblyName>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<!-- xUnit1051: prefer TestContext.Current.CancellationToken. Style/responsiveness
+		     suggestion from the xunit.v3 analyzers; suppressed for this suite's existing
+		     CancellationToken usage rather than rewriting every call site. -->
+		<NoWarn>$(NoWarn);xUnit1051</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-		<PackageReference Include="xunit" Version="2.9.2" />
-		<PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
-		<PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
+		<PackageReference Include="xunit.v3" Version="2.0.3" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
 		<PackageReference Include="NSubstitute" Version="5.3.0" />
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
@@ -43,9 +47,9 @@
 	<ItemGroup>
 		<None Include="..\..\samples\appsettings.aiunit.json" Link="appsettings.aiunit.json" CopyToOutputDirectory="PreserveNewest" />
 		<None Update="AiUnitReplWireframeComparisons\*.yaml" CopyToOutputDirectory="PreserveNewest" />
-		<!-- preEnumerateTheories:false stops xUnit from invoking DataAttribute.GetData
-		     (which runs AiReviewExecutor) at discovery, so discovering this assembly
-		     never triggers AI calls. Must be copied to the output directory. -->
+		<!-- Assembly-wide belt-and-suspenders for the discovery gate. The primary
+		     gate is AiReviewAttribute.SupportsDiscoveryEnumeration()=false plus
+		     [Theory(DisableDiscoveryEnumeration=true)]. Copied to the output dir. -->
 		<None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
