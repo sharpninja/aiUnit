@@ -8,6 +8,12 @@ namespace SharpNinja.AiUnit.Review;
 
 internal static class AiReviewExecutor
 {
+	// WS-B: AiCodeReview/AiPlanReview/AiProjectReview must never run concurrently
+	// in a single process. This process-wide gate serializes the agent call (and
+	// multi-agent aggregation) regardless of consumer test layout or xUnit
+	// collection configuration.
+	private static readonly SemaphoreSlim s_reviewGate = new(1, 1);
+
 	public static Task<string> ExecuteAsync(
 		AiReviewExecutionRequest request,
 		IAiReviewClientResolver resolver,
@@ -27,7 +33,17 @@ internal static class AiReviewExecutor
 		CancellationToken cancellationToken = default)
 	{
 		var started = startedUtc ?? DateTimeOffset.UtcNow;
-		var production = await ProduceAsync(request, resolver, cancellationToken).ConfigureAwait(false);
+
+		await s_reviewGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+		AiReviewProduction production;
+		try
+		{
+			production = await ProduceAsync(request, resolver, cancellationToken).ConfigureAwait(false);
+		}
+		finally
+		{
+			s_reviewGate.Release();
+		}
 
 		var entry = new AiReviewRunLogEntry(
 			started,

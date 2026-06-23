@@ -31,6 +31,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
   JSON file remains the canonical machine record. `AiReviewRunLogRef` gains a
   local `MarkdownPath`, surfaced in the review `resultJson` as
   `runLog.markdownPath` (no online URL counterpart).
+- **Serialized reviews**: `[AiCodeReview]`/`[AiPlanReview]`/`[AiProjectReview]`
+  are now serialized at the agent call by a process-wide gate, so reviews never
+  run concurrently in a single test runner regardless of test layout. New public
+  `AiReviewCollection` (`[Collection(AiReviewCollection.Name)]`,
+  `DisableParallelization = true`) for xUnit-idiomatic serial ordering.
 - **Discovery gate**: documented that review attributes never trigger AI calls at
   test-discovery time, with `preEnumerateTheories:false` (`xunit.runner.json`) as
   the assembly-wide switch; the aiUnit test project now ships that config.

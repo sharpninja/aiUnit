@@ -800,6 +800,27 @@ merely by discovering the assembly in an IDE or CI test-explorer pass. On xUnit
 v3 the same effect is also available per test via
 `[Theory(DisableDiscoveryEnumeration = true)]`.
 
+### Reviews never run in parallel
+
+`[AiCodeReview]` / `[AiPlanReview]` / `[AiProjectReview]` are serialized at the
+agent call by a process-wide gate inside aiUnit, so two reviews never execute
+concurrently in a single test runner regardless of how your test classes are laid
+out (this avoids overlapping CLI/HTTP review processes contending for the same
+tool or rate limit). For xUnit-idiomatic ordering you can additionally place your
+review test classes in the shipped serial collection:
+
+```csharp
+using SharpNinja.AiUnit.Review;
+
+[Collection(AiReviewCollection.Name)] // "aiUnit AI Reviews"; DisableParallelization = true
+public class MyReviewTests
+{
+    [Theory]
+    [AiCodeReview]
+    public void Code_HasNoBlockingFindings(string prompt, string resultJson) { /* ... */ }
+}
+```
+
 ---
 
 ## JSON Assertions
