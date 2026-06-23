@@ -18,7 +18,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
   `GetData(MethodInfo, DisposalTracker)` and `SupportsDiscoveryEnumeration()`
   directly (the separate `AiReviewDataDiscoverer` is removed). **Consumer test
   projects must also be on xUnit v3** (reference `xunit.v3` +
-  `xunit.runner.visualstudio` 3.x). Version bumped to 1.0.0.
+  `xunit.runner.visualstudio` 3.x). Major version bumped to 2.0.0. See
+  `docs/upgrade-aiunit-xunit-v3.md` for the consumer upgrade guide.
 
 ### Added
 - **Review run logs**: every review now persists a run-log result file (review
