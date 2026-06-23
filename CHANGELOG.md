@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING: migrated to xUnit v3.** The package now targets `xunit.v3`
+  (`xunit.v3.extensibility.core`) and drops `Xunit.SkippableFact`. `[AiFact]` /
+  `[AiTheory]` derive from the native v3 `FactAttribute` / `TheoryAttribute`
+  (native `Skip`, and `[Theory(DisableDiscoveryEnumeration = true)]`); `AiSkip`
+  uses the v3 dynamic-skip token; `AiReviewAttribute` implements the v3 async
+  `GetData(MethodInfo, DisposalTracker)` and `SupportsDiscoveryEnumeration()`
+  directly (the separate `AiReviewDataDiscoverer` is removed). **Consumer test
+  projects must also be on xUnit v3** (reference `xunit.v3` +
+  `xunit.runner.visualstudio` 3.x). Version bumped to 1.0.0.
+
 ### Added
 - **Review run logs**: every review now persists a run-log result file (review
   type, effective prompt, resolving agent(s), provider/model, latency, token

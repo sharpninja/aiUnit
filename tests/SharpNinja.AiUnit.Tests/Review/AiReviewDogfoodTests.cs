@@ -9,13 +9,11 @@ public sealed class AiReviewDogfoodTests
 {
 	private const string MissingReviewAgent = "__aiunit_dogfood_missing_agent__";
 
-	// Discovery gate: xunit.runner.json sets preEnumerateTheories:false, so xUnit
-	// v2 defers DataAttribute.GetData (which runs AiReviewExecutor) to execution
-	// time. Discovering this assembly therefore never triggers a review/AI call.
-	// (Per-theory [Theory(DisableDiscoveryEnumeration=true)] is xUnit v3 syntax and
-	// does not exist on the v2 TheoryAttribute, so the runner-level switch is the
-	// effective gate here.)
-	[Theory]
+	// Discovery gate (xUnit v3): DisableDiscoveryEnumeration defers
+	// DataAttribute.GetData (which runs AiReviewExecutor) to execution time, and
+	// AiReviewAttribute.SupportsDiscoveryEnumeration() returns false as a
+	// library-level guarantee. Discovering this assembly never triggers an AI call.
+	[Theory(DisableDiscoveryEnumeration = true)]
 	[AiCodeReview("Dogfood code review: review the AiReview attribute data-row contract.", Agent = MissingReviewAgent)]
 	[AiPlanReview("Dogfood plan review: review the PLAN-AIUNITREPL-001 validation gates.", Agent = MissingReviewAgent)]
 	[AiProjectReview("Dogfood project review: review aiUnit package readiness.", Agent = MissingReviewAgent)]
@@ -52,9 +50,8 @@ public sealed class AiReviewDogfoodTests
 		}
 	}
 
-	// See discovery-gate note above: preEnumerateTheories:false in xunit.runner.json
-	// keeps this from invoking the review executor at discovery time.
-	[Theory]
+	// See discovery-gate note above.
+	[Theory(DisableDiscoveryEnumeration = true)]
 	[AiCodeReview(Agent = MissingReviewAgent)]
 	[AiPlanReview(Agent = MissingReviewAgent)]
 	[AiProjectReview(Agent = MissingReviewAgent)]

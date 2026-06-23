@@ -207,7 +207,7 @@ public sealed class AiUnitReplWireframeComparisonTests
 	{
 		if (!AiUnitReplWireframeComparisonOptions.Enabled)
 		{
-			Skip.If(true, "Set AIUNIT_REPL_VISUAL_COMPARISON_ENABLED=true to run live aiUnit TUI wireframe comparisons.");
+			Assert.Skip("Set AIUNIT_REPL_VISUAL_COMPARISON_ENABLED=true to run live aiUnit TUI wireframe comparisons.");
 		}
 
 		AiSkip.IfNoStrategy();
@@ -227,7 +227,7 @@ public sealed class AiUnitReplWireframeComparisonTests
 
 		if (response.Error is { } error)
 		{
-			Skip.If(
+			Assert.SkipWhen(
 				string.Equals(error.ErrorCode, "auth", StringComparison.OrdinalIgnoreCase)
 					|| error.HttpStatus is 401 or 403,
 				error.Message);

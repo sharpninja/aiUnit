@@ -9,6 +9,7 @@ using SharpNinja.AiUnit.Frontier;
 using SharpNinja.AiUnit.Review;
 using Xunit;
 using Xunit.Sdk;
+using Xunit.v3;
 
 namespace SharpNinja.AiUnit.Tests.Review;
 
@@ -139,9 +140,11 @@ public sealed class AiReviewAttributeTests
 	[Fact]
 	public void ReviewAttributes_DisableDiscoveryEnumeration()
 	{
-		var discoverer = new AiReviewDataDiscoverer();
-
-		Assert.False(discoverer.SupportsDiscoveryEnumeration(null!, null!));
+		// xUnit v3: SupportsDiscoveryEnumeration() lives on the data attribute
+		// itself; returning false keeps GetData (and the agent call) out of discovery.
+		Assert.False(new AiCodeReviewAttribute("x").SupportsDiscoveryEnumeration());
+		Assert.False(new AiPlanReviewAttribute("x").SupportsDiscoveryEnumeration());
+		Assert.False(new AiProjectReviewAttribute("x").SupportsDiscoveryEnumeration());
 	}
 
 	[Fact]

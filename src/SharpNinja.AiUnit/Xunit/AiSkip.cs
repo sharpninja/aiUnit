@@ -1,7 +1,7 @@
 namespace SharpNinja.AiUnit.Xunit;
 
 /// <summary>
-/// Convenience helpers that wrap <see cref="global::Xunit.Skip"/> with
+/// Convenience helpers that perform an xUnit v3 dynamic skip with
 /// aiUnit-specific semantics. Use these from inside a test body when the
 /// row/case needs to skip based on a runtime condition that the
 /// discovery-time <see cref="AiFactAttribute"/> / <see cref="AiTheoryAttribute"/>
@@ -27,7 +27,10 @@ public static class AiSkip
 			{
 				msg = "No aiUnit strategy resolved.";
 			}
-			global::Xunit.Skip.If(true, msg);
+
+			// xUnit v3 dynamic skip: a test that throws an exception whose message
+			// begins with the dynamic-skip token is reported as skipped (not failed).
+			throw new global::System.Exception(global::Xunit.v3.DynamicSkipToken.Value + msg);
 		}
 	}
 }
