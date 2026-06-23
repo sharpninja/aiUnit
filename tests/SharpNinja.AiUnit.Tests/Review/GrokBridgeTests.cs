@@ -231,6 +231,131 @@ public sealed class GrokBridgeTests
 		}
 	}
 
+	[Fact]
+	public async Task Bridge_IgnoresLegacyAiUnitGrokModel_AndUsesAiUnitModel()
+	{
+		// WS-A regression guard: the bridge must resolve the model from the shared
+		// AIUNIT_MODEL path like every other strategy. The retired AIUNIT_GROK_MODEL
+		// variable must have no effect even when present in the environment.
+		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
+		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
+		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
+
+		try
+		{
+			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
+			process.StartInfo.ArgumentList.Add("Review type: code");
+			process.StartInfo.Environment["AIUNIT_MODEL"] = "grok-build";
+			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-build";
+			process.StartInfo.Environment["AIUNIT_GROK_MODEL"] = "legacy-should-be-ignored";
+
+			Assert.True(process.Start(), "Expected Grok bridge process to start.");
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+			await process.StandardError.ReadToEndAsync(timeout.Token);
+			await process.WaitForExitAsync(timeout.Token);
+			var stdout = await stdoutTask;
+
+			Assert.Equal(0, process.ExitCode);
+			Assert.Equal(ValidReviewJson, stdout.Trim());
+
+			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
+			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
+			var root = metadata.RootElement;
+			Assert.Equal("grok-build", root.GetProperty("model").GetString());
+			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+			Assert.Contains("--model", arguments);
+			Assert.Contains("grok-build", arguments);
+			Assert.DoesNotContain("legacy-should-be-ignored", arguments);
+		}
+		finally
+		{
+			TryDeleteDirectory(workspace);
+			TryDeleteDirectory(diagnostics);
+		}
+	}
+
+	[Fact]
+	public async Task Bridge_FallsBackToAiUnitModelVersion_WhenAiUnitModelIsPlaceholder()
+	{
+		// AIUNIT_MODEL holds a placeholder like "(cli-managed)"; the bridge falls back
+		// to AIUNIT_MODEL_VERSION, matching the shared resolution contract.
+		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
+		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
+		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
+
+		try
+		{
+			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
+			process.StartInfo.ArgumentList.Add("Review type: code");
+			process.StartInfo.Environment["AIUNIT_MODEL"] = "(cli-managed)";
+			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "grok-build";
+
+			Assert.True(process.Start(), "Expected Grok bridge process to start.");
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+			await process.StandardError.ReadToEndAsync(timeout.Token);
+			await process.WaitForExitAsync(timeout.Token);
+			var stdout = await stdoutTask;
+
+			Assert.Equal(0, process.ExitCode);
+			Assert.Equal(ValidReviewJson, stdout.Trim());
+
+			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
+			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
+			var root = metadata.RootElement;
+			Assert.Equal("grok-build", root.GetProperty("model").GetString());
+			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+			Assert.Contains("--model", arguments);
+			Assert.Contains("grok-build", arguments);
+		}
+		finally
+		{
+			TryDeleteDirectory(workspace);
+			TryDeleteDirectory(diagnostics);
+		}
+	}
+
+	[Fact]
+	public async Task Bridge_OmitsModelFlag_WhenBothModelVariablesArePlaceholders()
+	{
+		// Neither variable resolves to a concrete model (both are "(...)" placeholders),
+		// so the bridge omits --model entirely and records a null model.
+		var workspace = CreateTempDirectory("aiunit-grok-workspace-");
+		var diagnostics = CreateTempDirectory("aiunit-grok-diagnostics-");
+		var fakeGrok = await CreateFakeGrokAsync(workspace, "fake-grok", ValidReviewJson, exitCode: 0);
+
+		try
+		{
+			using var process = CreateBridgeProcess(workspace, diagnostics, fakeGrok);
+			process.StartInfo.ArgumentList.Add("Review type: code");
+			process.StartInfo.Environment["AIUNIT_MODEL"] = "(cli-managed)";
+			process.StartInfo.Environment["AIUNIT_MODEL_VERSION"] = "(cli-managed)";
+
+			Assert.True(process.Start(), "Expected Grok bridge process to start.");
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+			await process.StandardError.ReadToEndAsync(timeout.Token);
+			await process.WaitForExitAsync(timeout.Token);
+			var stdout = await stdoutTask;
+
+			Assert.Equal(0, process.ExitCode);
+			Assert.Equal(ValidReviewJson, stdout.Trim());
+
+			var metadataPath = Assert.Single(Directory.GetFiles(diagnostics, "metadata.json", SearchOption.AllDirectories));
+			using var metadata = JsonDocument.Parse(await File.ReadAllTextAsync(metadataPath));
+			var root = metadata.RootElement;
+			Assert.Equal(JsonValueKind.Null, root.GetProperty("model").ValueKind);
+			var arguments = root.GetProperty("arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+			Assert.DoesNotContain("--model", arguments);
+		}
+		finally
+		{
+			TryDeleteDirectory(workspace);
+			TryDeleteDirectory(diagnostics);
+		}
+	}
+
 	private static Process CreateBridgeProcess(string? workspace, string? diagnostics, string fakeGrok)
 	{
 		var bridge = ResolveBridgeExecutable();
